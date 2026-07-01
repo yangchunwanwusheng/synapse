@@ -1,0 +1,8 @@
+== DRIFT-DETECT warmup=5 n_test=24 p_drift=0.5 backend=paratera embedder=api ==
+Code parsing failed on line 3 due to: SyntaxError: invalid syntax. Perhaps you 
+forgot a comma? (<unknown>, line 3)
+    "The earliest form of jazz was Dixieland or "New Orleans jazz," 
+characterized by collective improvisation and a front line of trumpet, 
+clarinet, and trombone.",
+     ^
+[drift_detect] familiar 1240.6 vs drift 3843.0 bytes | AUC residual=1.0 (baseline retrieval=1.0) | best-F1 detector 1.0 (P1.0/R1.0) -> runs\drift_detect_20260622_170916

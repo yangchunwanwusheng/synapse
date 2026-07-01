@@ -1,0 +1,133 @@
+{
+  "config": {
+    "embed_dim": 64,
+    "quant_grid": 64,
+    "sparsity_eps": 0,
+    "verify_threshold": 0.97,
+    "n_facts": 40,
+    "retrieval_k": 5,
+    "hit_threshold": 0.15,
+    "w_keyword": 0.3,
+    "w_tag": 0.2,
+    "w_semantic": 0.5,
+    "rounds": 10,
+    "seeds": [
+      0,
+      1,
+      2
+    ],
+    "abl_no_tom": false,
+    "abl_no_consolidation": false,
+    "abl_no_residual": false,
+    "abl_no_checksum": false,
+    "qa_sentences_k": 4,
+    "qa_history_k": 2,
+    "qa_para_k": 3,
+    "qa_retrieval": "single",
+    "llm_backend": "mock",
+    "embedder": "hash",
+    "model": "Qwen3-30B-A3B-Instruct-2507",
+    "api_base": "https://llmapi.paratera.com/v1",
+    "api_key_env": "PARATERA_API_KEY",
+    "temperature": 0.0,
+    "embed_model": "GLM-Embedding-3"
+  },
+  "exp": "verified_lossy",
+  "warmup": 3,
+  "n": 10,
+  "n_samples": 12,
+  "verify_threshold": 0.97,
+  "synced_mean_cos": 1.0,
+  "synced_fallback_rate": 0.0,
+  "desync_mean_cos": 1.0,
+  "desync_detection_rate": 0.0,
+  "desync_true_corrupt_rate": 0.0,
+  "silent_corruptions_with_checksum": 0,
+  "silent_corruptions_without_checksum": 0,
+  "rows": [
+    {
+      "i": 0,
+      "cos_synced": 1.0,
+      "verify_synced": true,
+      "cos_desync": 1.0,
+      "verify_desync": true
+    },
+    {
+      "i": 1,
+      "cos_synced": 1.0,
+      "verify_synced": true,
+      "cos_desync": 1.0,
+      "verify_desync": true
+    },
+    {
+      "i": 2,
+      "cos_synced": 1.0,
+      "verify_synced": true,
+      "cos_desync": 1.0,
+      "verify_desync": true
+    },
+    {
+      "i": 3,
+      "cos_synced": 1.0,
+      "verify_synced": true,
+      "cos_desync": 1.0,
+      "verify_desync": true
+    },
+    {
+      "i": 4,
+      "cos_synced": 1.0,
+      "verify_synced": true,
+      "cos_desync": 1.0,
+      "verify_desync": true
+    },
+    {
+      "i": 5,
+      "cos_synced": 1.0,
+      "verify_synced": true,
+      "cos_desync": 1.0,
+      "verify_desync": true
+    },
+    {
+      "i": 6,
+      "cos_synced": 1.0,
+      "verify_synced": true,
+      "cos_desync": 1.0,
+      "verify_desync": true
+    },
+    {
+      "i": 7,
+      "cos_synced": 1.0,
+      "verify_synced": true,
+      "cos_desync": 1.0,
+      "verify_desync": true
+    },
+    {
+      "i": 8,
+      "cos_synced": 1.0,
+      "verify_synced": true,
+      "cos_desync": 1.0,
+      "verify_desync": true
+    },
+    {
+      "i": 9,
+      "cos_synced": 1.0,
+      "verify_synced": true,
+      "cos_desync": 1.0,
+      "verify_desync": true
+    },
+    {
+      "i": 10,
+      "cos_synced": 1.0,
+      "verify_synced": true,
+      "cos_desync": 1.0,
+      "verify_desync": true
+    },
+    {
+      "i": 11,
+      "cos_synced": 1.0,
+      "verify_synced": true,
+      "cos_desync": 1.0,
+      "verify_desync": true
+    }
+  ]
+}

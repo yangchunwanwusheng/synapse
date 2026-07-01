@@ -1,0 +1,24 @@
+== HotpotQA-STATS: model=Qwen3-30B-A3B-Instruct-2507 embedder=api para_k=3 N=50 × R=3 ==
+{
+  "level_counts": {
+    "hard": 50
+  },
+  "token_saved_pct(mean±std)": "73.77±0.01",
+  "text_F1(mean±std)": "0.6961±0.0172",
+  "synapse_F1(mean±std)": "0.5843±0.0143",
+  "gold_recall(mean±std)": "0.78±0.0",
+  "paired_ΔF1_mean": -0.1118,
+  "paired_ΔF1_ci95": [
+    -0.1726,
+    -0.0537
+  ],
+  "paired_winloss": {
+    "syn_win": 6,
+    "tie": 111,
+    "syn_loss": 33,
+    "n_pairs": 150
+  }
+}
+  [PASS] token 省 73.77%±0.01 (远超噪声=真信号)
+  [WARN] 质量非劣 (配对 ΔF1=-0.1118, 95%CI=[-0.1726, -0.0537], 胜/平/负=6/111/33)
+  artifacts -> runs\hotpot_stats_20260621_182630/result.json

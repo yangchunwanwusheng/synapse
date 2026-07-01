@@ -1,0 +1,23 @@
+{
+  "exp": "floor",
+  "n_repeats": 2,
+  "topics": [
+    "the Transformer attention mechanism in deep learning",
+    "CRISPR-Cas9 gene editing in molecular biology"
+  ],
+  "floor": {
+    "second_over_single_floor": [
+      0.867,
+      0.01
+    ],
+    "second_over_centroid_floor": [
+      1.0,
+      0.0
+    ],
+    "online_drop_pct": [
+      23.35,
+      1.65
+    ],
+    "n_below_single_floor": 2
+  }
+}

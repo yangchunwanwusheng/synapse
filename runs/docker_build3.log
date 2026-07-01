@@ -1,0 +1,197 @@
+#0 building with "desktop-linux" instance using docker driver
+
+#1 [internal] load build definition from Dockerfile
+#1 transferring dockerfile: 1.71kB done
+#1 DONE 0.0s
+
+#2 [internal] load metadata for docker.io/openeuler/openeuler:24.03-lts
+#2 DONE 0.5s
+
+#3 [internal] load .dockerignore
+#3 transferring context: 260B done
+#3 DONE 0.0s
+
+#4 [ 1/11] FROM docker.io/openeuler/openeuler:24.03-lts@sha256:ace677f48c79ae6bc17046cb8c2940b38f7050afc752c8463e1553b9e7b60974
+#4 resolve docker.io/openeuler/openeuler:24.03-lts@sha256:ace677f48c79ae6bc17046cb8c2940b38f7050afc752c8463e1553b9e7b60974 0.0s done
+#4 CACHED
+
+#5 [internal] load build context
+#5 transferring context: 1.95kB done
+#5 DONE 0.0s
+
+#6 [ 2/11] RUN dnf install -y python3 python3-pip shadow-utils && dnf clean all
+#6 4.529 OS                                              765 kB/s | 2.9 MB     00:03    
+#6 11.07 everything                                      2.6 MB/s |  16 MB     00:06    
+#6 17.06 EPOL                                            1.0 MB/s | 4.3 MB     00:04    
+#6 19.27 debuginfo                                       3.7 MB/s | 4.4 MB     00:01    
+#6 20.85 source                                          1.5 MB/s | 1.7 MB     00:01    
+#6 43.87 update                                          4.0 MB/s |  91 MB     00:22    
+#6 55.61 update-source                                   1.4 MB/s | 2.7 MB     00:01    
+#6 57.86 EPOL-update                                     462 kB/s | 910 kB     00:01    
+#6 59.21 Package python3-3.11.6-26.oe2403.x86_64 is already installed.
+#6 59.26 Dependencies resolved.
+#6 59.26 ================================================================================
+#6 59.26  Package                 Arch        Version                  Repository   Size
+#6 59.26 ================================================================================
+#6 59.26 Installing:
+#6 59.26  python3-pip             noarch      23.3.1-11.oe2403         update      3.4 M
+#6 59.26  shadow                  x86_64      2:4.14.3-8.oe2403        update      663 k
+#6 59.26 Installing dependencies:
+#6 59.26  libsemanage             x86_64      3.5-1.oe2403             OS          103 k
+#6 59.26  python3-setuptools      noarch      68.0.0-2.oe2403          update      1.6 M
+#6 59.26  shadow-subid-devel      x86_64      2:4.14.3-8.oe2403        update       68 k
+#6 59.26 
+#6 59.26 Transaction Summary
+#6 59.26 ================================================================================
+#6 59.26 Install  5 Packages
+#6 59.26 
+#6 59.26 Total download size: 5.8 M
+#6 59.26 Installed size: 27 M
+#6 59.26 Downloading Packages:
+#6 61.70 (1/5): libsemanage-3.5-1.oe2403.x86_64.rpm      272 kB/s | 103 kB     00:00    
+#6 62.31 (2/5): python3-setuptools-68.0.0-2.oe2403.noarc 1.6 MB/s | 1.6 MB     00:00    
+#6 62.55 (3/5): python3-pip-23.3.1-11.oe2403.noarch.rpm  2.8 MB/s | 3.4 MB     00:01    
+#6 62.60 (4/5): shadow-4.14.3-8.oe2403.x86_64.rpm        743 kB/s | 663 kB     00:00    
+#6 62.60 (5/5): shadow-subid-devel-4.14.3-8.oe2403.x86_6 236 kB/s |  68 kB     00:00    
+#6 62.60 --------------------------------------------------------------------------------
+#6 62.60 Total                                           1.7 MB/s | 5.8 MB     00:03     
+#6 62.61 retrieving repo key for OS unencrypted from http://repo.openeuler.org/openEuler-24.03-LTS/OS/x86_64/RPM-GPG-KEY-openEuler
+#6 62.93 OS                                              9.2 kB/s | 3.0 kB     00:00    
+#6 63.00 Importing GPG key 0xB675600B:
+#6 63.00  Userid     : "openeuler <openeuler@compass-ci.com>"
+#6 63.00  Fingerprint: 8AA1 6BF9 F2CA 5244 010D CA96 3B47 7C60 B675 600B
+#6 63.00  From       : http://repo.openeuler.org/openEuler-24.03-LTS/OS/x86_64/RPM-GPG-KEY-openEuler
+#6 63.03 Key imported successfully
+#6 63.05 Running transaction check
+#6 63.06 Transaction check succeeded.
+#6 63.06 Running transaction test
+#6 63.08 Transaction test succeeded.
+#6 63.08 Running transaction
+#6 63.20   Preparing        :                                                        1/1 
+#6 63.20   Installing       : libsemanage-3.5-1.oe2403.x86_64                        1/5 
+#6 63.22   Installing       : shadow-subid-devel-2:4.14.3-8.oe2403.x86_64            2/5 
+#6 63.24   Installing       : python3-setuptools-68.0.0-2.oe2403.noarch              3/5 
+#6 63.36   Installing       : python3-pip-23.3.1-11.oe2403.noarch                    4/5 
+#6 63.61   Installing       : shadow-2:4.14.3-8.oe2403.x86_64                        5/5 
+#6 63.68   Running scriptlet: shadow-2:4.14.3-8.oe2403.x86_64                        5/5 
+#6 63.82   Verifying        : libsemanage-3.5-1.oe2403.x86_64                        1/5 
+#6 63.82   Verifying        : python3-pip-23.3.1-11.oe2403.noarch                    2/5 
+#6 63.82   Verifying        : python3-setuptools-68.0.0-2.oe2403.noarch              3/5 
+#6 63.82   Verifying        : shadow-2:4.14.3-8.oe2403.x86_64                        4/5 
+#6 63.82   Verifying        : shadow-subid-devel-2:4.14.3-8.oe2403.x86_64            5/5 
+#6 63.87 
+#6 63.87 Installed:
+#6 63.87   libsemanage-3.5-1.oe2403.x86_64                                               
+#6 63.87   python3-pip-23.3.1-11.oe2403.noarch                                           
+#6 63.87   python3-setuptools-68.0.0-2.oe2403.noarch                                     
+#6 63.87   shadow-2:4.14.3-8.oe2403.x86_64                                               
+#6 63.87   shadow-subid-devel-2:4.14.3-8.oe2403.x86_64                                   
+#6 63.87 
+#6 63.87 Complete!
+#6 64.00 56 files removed
+#6 DONE 64.0s
+
+#7 [ 3/11] RUN python3 -m pip install --no-cache-dir uv
+#7 1.734 Collecting uv
+#7 2.269   Downloading uv-0.11.23-py3-none-manylinux_2_17_x86_64.manylinux2014_x86_64.whl.metadata (11 kB)
+#7 2.431 Downloading uv-0.11.23-py3-none-manylinux_2_17_x86_64.manylinux2014_x86_64.whl (25.4 MB)
+#7 4.847    ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━ 25.4/25.4 MB 14.1 MB/s eta 0:00:00
+#7 4.893 Installing collected packages: uv
+#7 5.151 Successfully installed uv-0.11.23
+#7 5.151 WARNING: Running pip as the 'root' user can result in broken permissions and conflicting behaviour with the system package manager. It is recommended to use a virtual environment instead: https://pip.pypa.io/warnings/venv
+#7 DONE 5.8s
+
+#8 [ 4/11] WORKDIR /app
+#8 DONE 0.1s
+
+#9 [ 5/11] COPY pyproject.toml uv.lock README.md ./
+#9 DONE 0.1s
+
+#10 [ 6/11] COPY src ./src
+#10 DONE 0.1s
+
+#11 [ 7/11] RUN uv sync --frozen --no-dev --extra api
+#11 0.299 Using CPython 3.11.6 interpreter at: /usr/bin/python3
+#11 0.299 Creating virtual environment at: .venv
+#11 0.311    Building synapse-mas @ file:///app
+#11 1.127 Downloading openai (1.3MiB)
+#11 1.128 Downloading hf-xet (4.3MiB)
+#11 1.128 Downloading pillow (6.8MiB)
+#11 1.129 Downloading pygments (1.2MiB)
+#11 1.129 Downloading pydantic-core (2.0MiB)
+#11 3.158  Downloaded pygments
+#11 3.175  Downloaded openai
+#11 3.394  Downloaded pydantic-core
+#11 4.148  Downloaded hf-xet
+#11 4.376  Downloaded pillow
+#11 4.469       Built synapse-mas @ file:///app
+#11 4.470 Prepared 39 packages in 4.16s
+#11 4.494 Installed 39 packages in 24ms
+#11 4.494  + annotated-doc==0.0.4
+#11 4.494  + annotated-types==0.7.0
+#11 4.494  + anyio==4.14.0
+#11 4.494  + certifi==2026.6.17
+#11 4.494  + charset-normalizer==3.4.7
+#11 4.494  + click==8.4.1
+#11 4.494  + distro==1.9.0
+#11 4.494  + filelock==3.29.4
+#11 4.494  + fsspec==2026.6.0
+#11 4.494  + h11==0.16.0
+#11 4.494  + hf-xet==1.5.1
+#11 4.494  + httpcore==1.0.9
+#11 4.494  + httpx==0.28.1
+#11 4.494  + huggingface-hub==1.20.0
+#11 4.494  + idna==3.18
+#11 4.494  + jinja2==3.1.6
+#11 4.494  + jiter==0.15.0
+#11 4.494  + markdown-it-py==4.2.0
+#11 4.494  + markupsafe==3.0.3
+#11 4.494  + mdurl==0.1.2
+#11 4.494  + openai==2.43.0
+#11 4.494  + packaging==26.2
+#11 4.494  + pillow==12.2.0
+#11 4.494  + pydantic==2.13.4
+#11 4.494  + pydantic-core==2.46.4
+#11 4.494  + pygments==2.20.0
+#11 4.494  + python-dotenv==1.2.2
+#11 4.494  + pyyaml==6.0.3
+#11 4.494  + requests==2.34.2
+#11 4.494  + rich==15.0.0
+#11 4.494  + shellingham==1.5.4
+#11 4.494  + smolagents==1.26.0
+#11 4.494  + sniffio==1.3.1
+#11 4.494  + synapse-mas==0.1.0 (from file:///app)
+#11 4.494  + tqdm==4.68.3
+#11 4.494  + typer==0.25.1
+#11 4.494  + typing-extensions==4.15.0
+#11 4.495  + typing-inspection==0.4.2
+#11 4.495  + urllib3==2.7.0
+#11 DONE 4.6s
+
+#12 [ 8/11] COPY configs ./configs
+#12 DONE 0.1s
+
+#13 [ 9/11] COPY tests ./tests
+#13 DONE 0.1s
+
+#14 [10/11] COPY scripts ./scripts
+#14 DONE 0.1s
+
+#15 [11/11] RUN useradd -r -u 1001 -m -d /home/synapse synapse && chown -R synapse:synapse /app
+#15 0.265 useradd warning: synapse's uid 1001 is greater than SYS_UID_MAX 999
+#15 DONE 16.5s
+
+#16 exporting to image
+#16 exporting layers
+#16 exporting layers 2.3s done
+#16 exporting manifest sha256:7abbf2ad3e88758eadc1cb1c47993562ba67ee31d4801007c78eaf25011624c5 0.0s done
+#16 exporting config sha256:823466fd41d2e87aa07ad2d126254e64c0e274a2833b4b49a31915b086e0d742 0.0s done
+#16 exporting attestation manifest sha256:5a2bfd744590f62edd599247bf8d489106cde43a3572e5d2c539bccf0279d468 0.1s done
+#16 exporting manifest list sha256:3572b7f2c27cec9506a5c4de7dac10edb6d6877fd41e1516ecc0244c8b5636d8
+#16 exporting manifest list sha256:3572b7f2c27cec9506a5c4de7dac10edb6d6877fd41e1516ecc0244c8b5636d8 0.0s done
+#16 naming to docker.io/library/synapse:latest done
+#16 unpacking to docker.io/library/synapse:latest
+#16 unpacking to docker.io/library/synapse:latest 1.8s done
+#16 DONE 4.3s
+
+View build details: docker-desktop://dashboard/build/desktop-linux/desktop-linux/i1zu78kqj5t8482wd40f3wpdr

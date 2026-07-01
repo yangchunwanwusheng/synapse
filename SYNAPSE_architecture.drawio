@@ -1,0 +1,128 @@
+<mxfile host="app.diagrams.net" version="24.0.0">
+  <diagram name="SYNAPSE v5 架构" id="synapse-v5-arch">
+    <mxGraphModel dx="1200" dy="800" grid="1" gridSize="10" guides="1" tooltips="1" connect="1" arrows="1" fold="1" page="1" pageScale="1" pageWidth="1300" pageHeight="900" math="0" shadow="0" adaptiveColors="auto">
+      <root>
+        <mxCell id="0"/>
+        <mxCell id="1" parent="0"/>
+
+        <mxCell id="lane1" value="① 多 Agent 运行时（开源同族模型 / vLLM·可取隐状态）" style="swimlane;horizontal=0;startSize=110;fillColor=#e8f4f8;strokeColor=#6c8ebf;html=1;fontStyle=1;" vertex="1" parent="1">
+          <mxGeometry x="0" y="0" width="1240" height="150" as="geometry"/>
+        </mxCell>
+        <mxCell id="n_plan" value="Planner&#xa;（规划）" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#dae8fc;strokeColor=#6c8ebf;" vertex="1" parent="lane1">
+          <mxGeometry x="120" y="45" width="140" height="60" as="geometry"/>
+        </mxCell>
+        <mxCell id="n_retr" value="Retriever&#xa;（检索）" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#dae8fc;strokeColor=#6c8ebf;" vertex="1" parent="lane1">
+          <mxGeometry x="300" y="45" width="140" height="60" as="geometry"/>
+        </mxCell>
+        <mxCell id="n_exec" value="Executor · CodeAct&#xa;（沙箱执行）" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#dae8fc;strokeColor=#6c8ebf;" vertex="1" parent="lane1">
+          <mxGeometry x="480" y="45" width="160" height="60" as="geometry"/>
+        </mxCell>
+        <mxCell id="n_summ" value="Summarizer&#xa;（汇总）" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#dae8fc;strokeColor=#6c8ebf;" vertex="1" parent="lane1">
+          <mxGeometry x="680" y="45" width="140" height="60" as="geometry"/>
+        </mxCell>
+
+        <mxCell id="lane2" value="② 协议解析与调度（结构化协议 / 握手·能力发现 / 言语行为决策）" style="swimlane;horizontal=0;startSize=110;fillColor=#fff0e6;strokeColor=#d79b00;html=1;fontStyle=1;" vertex="1" parent="1">
+          <mxGeometry x="0" y="150" width="1240" height="150" as="geometry"/>
+        </mxCell>
+        <mxCell id="n_schema" value="类型化消息 Schema&#xa;{action,params,handles,capability}" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#ffe6cc;strokeColor=#d79b00;" vertex="1" parent="lane2">
+          <mxGeometry x="120" y="45" width="180" height="60" as="geometry"/>
+        </mxCell>
+        <mxCell id="n_cnr" value="握手 / 能力发现 CNR&#xa;（表示协商·异构降级）" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#ffe6cc;strokeColor=#d79b00;" vertex="1" parent="lane2">
+          <mxGeometry x="340" y="45" width="180" height="60" as="geometry"/>
+        </mxCell>
+        <mxCell id="n_efe" value="言语行为选择器&#xa;tell / ask / write / hold" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#ffcc99;strokeColor=#d79b00;fontStyle=1;" vertex="1" parent="lane2">
+          <mxGeometry x="560" y="45" width="180" height="60" as="geometry"/>
+        </mxCell>
+
+        <mxCell id="lane3" value="③ 状态交换 · 数据平面（核心：非文本状态传递 = 预测残差 + 校验）" style="swimlane;horizontal=0;startSize=110;fillColor=#fff2cc;strokeColor=#d6b656;html=1;fontStyle=1;" vertex="1" parent="1">
+          <mxGeometry x="0" y="300" width="1240" height="160" as="geometry"/>
+        </mxCell>
+        <mxCell id="n_cas" value="内容寻址库 CAS&#xa;（去重 / 句柄 / 通信即写记忆）" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#ffe599;strokeColor=#d6b656;" vertex="1" parent="lane3">
+          <mxGeometry x="120" y="50" width="180" height="60" as="geometry"/>
+        </mxCell>
+        <mxCell id="n_belief" value="接收方信念 B_j&#xa;（记忆视图 + ToM 估计）" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#ffe599;strokeColor=#d6b656;" vertex="1" parent="lane3">
+          <mxGeometry x="330" y="50" width="170" height="60" as="geometry"/>
+        </mxCell>
+        <mxCell id="n_resid" value="预测残差编码&#xa;只发 H(Y | B_j) 的“惊讶”" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#ffd966;strokeColor=#d6b656;fontStyle=1;" vertex="1" parent="lane3">
+          <mxGeometry x="530" y="50" width="180" height="60" as="geometry"/>
+        </mxCell>
+        <mxCell id="n_check" value="校验和 · Verified Lossy&#xa;hash(Y)；不符则回退 ask(full)" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#ffd966;strokeColor=#d6b656;fontStyle=1;" vertex="1" parent="lane3">
+          <mxGeometry x="740" y="50" width="190" height="60" as="geometry"/>
+        </mxCell>
+        <mxCell id="n_three" value="三级表示&#xa;隐状态 / 句向量 / 文本 diff" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#ffe599;strokeColor=#d6b656;" vertex="1" parent="lane3">
+          <mxGeometry x="960" y="50" width="170" height="60" as="geometry"/>
+        </mxCell>
+
+        <mxCell id="lane4" value="④ 共享记忆与认知（记忆单元 / 检索 / ToM 预测器 / 巩固器）" style="swimlane;horizontal=0;startSize=110;fillColor=#e8f5e9;strokeColor=#82b366;html=1;fontStyle=1;" vertex="1" parent="1">
+          <mxGeometry x="0" y="460" width="1240" height="150" as="geometry"/>
+        </mxCell>
+        <mxCell id="n_mem" value="记忆单元 + 元数据&#xa;(ID/来源/时间/主题/摘要)" style="shape=cylinder3;whiteSpace=wrap;html=1;fillColor=#d5e8d4;strokeColor=#82b366;" vertex="1" parent="lane4">
+          <mxGeometry x="120" y="40" width="150" height="70" as="geometry"/>
+        </mxCell>
+        <mxCell id="n_search" value="混合检索&#xa;关键词 / 标签 / 语义" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#d5e8d4;strokeColor=#82b366;" vertex="1" parent="lane4">
+          <mxGeometry x="320" y="45" width="160" height="60" as="geometry"/>
+        </mxCell>
+        <mxCell id="n_tom" value="ToM 预测器&#xa;估计 B_j（重构成功率自监督）" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#b9e0a5;strokeColor=#82b366;fontStyle=1;" vertex="1" parent="lane4">
+          <mxGeometry x="520" y="45" width="180" height="60" as="geometry"/>
+        </mxCell>
+        <mxCell id="n_consol" value="巩固器（睡眠 / 回放）&#xa;经验增长 → 速率收缩" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#b9e0a5;strokeColor=#82b366;fontStyle=1;" vertex="1" parent="lane4">
+          <mxGeometry x="740" y="45" width="180" height="60" as="geometry"/>
+        </mxCell>
+
+        <mxCell id="lane5" value="⑤ 评测与度量（双模式 A/B · eBPF 字节级 · 收缩-回弹现象）" style="swimlane;horizontal=0;startSize=110;fillColor=#f5f5f5;strokeColor=#999999;html=1;fontStyle=1;" vertex="1" parent="1">
+          <mxGeometry x="0" y="610" width="1240" height="150" as="geometry"/>
+        </mxCell>
+        <mxCell id="n_ab" value="双模式 A/B&#xa;text  vs  synapse" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#f0f0f0;strokeColor=#999999;" vertex="1" parent="lane5">
+          <mxGeometry x="120" y="45" width="150" height="60" as="geometry"/>
+        </mxCell>
+        <mxCell id="n_ebpf" value="eBPF 实测&#xa;字节 / 时延 / 质量 / FLOPs" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#f0f0f0;strokeColor=#999999;" vertex="1" parent="lane5">
+          <mxGeometry x="300" y="45" width="170" height="60" as="geometry"/>
+        </mxCell>
+        <mxCell id="n_dash" value="收缩-回弹仪表盘&#xa;R↓逼近地板 → 注入漂移 → R↑回弹" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#dae8fc;strokeColor=#6c8ebf;fontStyle=1;" vertex="1" parent="lane5">
+          <mxGeometry x="500" y="45" width="230" height="60" as="geometry"/>
+        </mxCell>
+
+        <mxCell id="lane6" value="底座 · openEuler 24.03-LTS-SP3" style="swimlane;horizontal=0;startSize=110;fillColor=#ede7f6;strokeColor=#9673a6;html=1;fontStyle=1;" vertex="1" parent="1">
+          <mxGeometry x="0" y="760" width="1240" height="110" as="geometry"/>
+        </mxCell>
+        <mxCell id="n_stack" value="vLLM　|　向量库 (Milvus/FAISS)　|　IPC·共享内存/mmap·Socket·gRPC　|　WASM/容器沙箱　|　eBPF 探针" style="rounded=0;whiteSpace=wrap;html=1;fillColor=#e1d5f0;strokeColor=#9673a6;" vertex="1" parent="lane6">
+          <mxGeometry x="120" y="30" width="1000" height="50" as="geometry"/>
+        </mxCell>
+
+        <mxCell id="e1" value="动作流" style="edgeStyle=orthogonalEdgeStyle;rounded=1;html=1;strokeColor=#6c8ebf;" edge="1" parent="1" source="n_plan" target="n_efe">
+          <mxGeometry relative="1" as="geometry"/>
+        </mxCell>
+        <mxCell id="e2" value="选 tell → 编码" style="edgeStyle=orthogonalEdgeStyle;rounded=1;html=1;strokeColor=#d79b00;" edge="1" parent="1" source="n_efe" target="n_resid">
+          <mxGeometry relative="1" as="geometry"/>
+        </mxCell>
+        <mxCell id="e3" value="估计 B_j" style="edgeStyle=orthogonalEdgeStyle;rounded=1;html=1;strokeColor=#82b366;" edge="1" parent="1" source="n_tom" target="n_belief">
+          <mxGeometry relative="1" as="geometry"/>
+        </mxCell>
+        <mxCell id="e4" value="只编码残差" style="edgeStyle=orthogonalEdgeStyle;rounded=1;html=1;strokeColor=#d6b656;" edge="1" parent="1" source="n_belief" target="n_resid">
+          <mxGeometry relative="1" as="geometry"/>
+        </mxCell>
+        <mxCell id="e5" value="" style="edgeStyle=orthogonalEdgeStyle;rounded=1;html=1;strokeColor=#d6b656;" edge="1" parent="1" source="n_resid" target="n_check">
+          <mxGeometry relative="1" as="geometry"/>
+        </mxCell>
+        <mxCell id="e6" value="handle 入库（通信即写记忆）" style="edgeStyle=orthogonalEdgeStyle;rounded=1;html=1;strokeColor=#82b366;" edge="1" parent="1" source="n_check" target="n_mem">
+          <mxGeometry relative="1" as="geometry"/>
+        </mxCell>
+        <mxCell id="e7" value="经验增长 → 收缩（核心反馈环）" style="edgeStyle=orthogonalEdgeStyle;rounded=1;html=1;dashed=1;strokeColor=#82b366;strokeWidth=2;" edge="1" parent="1" source="n_consol" target="n_tom">
+          <mxGeometry relative="1" as="geometry"/>
+        </mxCell>
+        <mxCell id="e8" value="巩固候选" style="edgeStyle=orthogonalEdgeStyle;rounded=1;html=1;dashed=1;strokeColor=#82b366;" edge="1" parent="1" source="n_mem" target="n_consol">
+          <mxGeometry relative="1" as="geometry"/>
+        </mxCell>
+        <mxCell id="e9" value="实测字节" style="edgeStyle=orthogonalEdgeStyle;rounded=1;html=1;strokeColor=#999999;" edge="1" parent="1" source="n_check" target="n_ebpf">
+          <mxGeometry relative="1" as="geometry"/>
+        </mxCell>
+        <mxCell id="e10" value="" style="edgeStyle=orthogonalEdgeStyle;rounded=1;html=1;strokeColor=#999999;" edge="1" parent="1" source="n_ebpf" target="n_dash">
+          <mxGeometry relative="1" as="geometry"/>
+        </mxCell>
+        <mxCell id="e11" value="异构降级" style="edgeStyle=orthogonalEdgeStyle;rounded=1;html=1;dashed=1;strokeColor=#d6b656;" edge="1" parent="1" source="n_cnr" target="n_three">
+          <mxGeometry relative="1" as="geometry"/>
+        </mxCell>
+      </root>
+    </mxGraphModel>
+  </diagram>
+</mxfile>

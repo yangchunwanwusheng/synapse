@@ -1,0 +1,26 @@
+== CoQA: model=Qwen3-30B-A3B-Instruct-2507 embedder=api k=6 convs=3 (每段=1组关联连续任务) ==
+{
+  "llm_token_saved_pct": 8.24,
+  "llm_input_saved_pct": 8.5,
+  "text_tokens_in/out/total": [
+    20006,
+    218,
+    20224
+  ],
+  "synapse_tokens_in/out/total": [
+    18305,
+    253,
+    18558
+  ],
+  "text_F1": 0.7333,
+  "synapse_F1": 0.7477,
+  "messages_text/syn": [
+    38,
+    38
+  ],
+  "synapse_hit_rate": 0.921,
+  "synapse_nontext_transfers": 38
+}
+  [PASS] 真实 LLM token 节省 (saved%=8.24, 输入省%=8.5)
+  [PASS] 答案质量保持 (synapse F1 0.7477 vs text 0.7333)
+  artifacts -> runs\coqa_20260621_111342/result.json

@@ -1,0 +1,166 @@
+{
+  "config": {
+    "embed_dim": 64,
+    "quant_grid": 64,
+    "sparsity_eps": 0,
+    "verify_threshold": 0.97,
+    "n_facts": 40,
+    "retrieval_k": 5,
+    "hit_threshold": 0.15,
+    "w_keyword": 0.3,
+    "w_tag": 0.2,
+    "w_semantic": 0.5,
+    "rounds": 10,
+    "seeds": [
+      0,
+      1,
+      2
+    ],
+    "abl_no_tom": false,
+    "abl_no_consolidation": false,
+    "abl_no_residual": false,
+    "abl_no_checksum": false,
+    "qa_sentences_k": 4,
+    "qa_history_k": 2,
+    "qa_para_k": 3,
+    "qa_retrieval": "single",
+    "llm_backend": "mock",
+    "embedder": "hash",
+    "model": "Qwen3-30B-A3B-Instruct-2507",
+    "api_base": "https://llmapi.paratera.com/v1",
+    "api_key_env": "PARATERA_API_KEY",
+    "temperature": 0.0,
+    "embed_model": "GLM-Embedding-3"
+  },
+  "exp": "drift_detect",
+  "warmup": 3,
+  "n_test": 16,
+  "p_drift": 0.5,
+  "seed": 0,
+  "n_familiar": 9,
+  "n_drift": 7,
+  "familiar_bytes_mean": 12.0,
+  "drift_bytes_mean": 26.3,
+  "auc_residual_bytes": 1.0,
+  "auc_retrieval_simlow_baseline": 1.0,
+  "detector_best_f1": {
+    "thr": 16,
+    "precision": 1.0,
+    "recall": 1.0,
+    "f1": 1.0
+  },
+  "rows": [
+    {
+      "i": 0,
+      "label": 1,
+      "topic": "glacial erosion landforms",
+      "bytes": 16,
+      "top1_sim": 0.0
+    },
+    {
+      "i": 1,
+      "label": 0,
+      "topic": "the Transformer attention mechanism in deep learning",
+      "bytes": 12,
+      "top1_sim": 0.4999
+    },
+    {
+      "i": 2,
+      "label": 0,
+      "topic": "the Transformer attention mechanism in deep learning",
+      "bytes": 12,
+      "top1_sim": 0.4999
+    },
+    {
+      "i": 3,
+      "label": 0,
+      "topic": "the Transformer attention mechanism in deep learning",
+      "bytes": 12,
+      "top1_sim": 0.4999
+    },
+    {
+      "i": 4,
+      "label": 1,
+      "topic": "the printing press and the Reformation",
+      "bytes": 30,
+      "top1_sim": 0.1497
+    },
+    {
+      "i": 5,
+      "label": 1,
+      "topic": "photosynthesis in green plants",
+      "bytes": 26,
+      "top1_sim": 0.1076
+    },
+    {
+      "i": 6,
+      "label": 1,
+      "topic": "the chemistry of ocean acidification",
+      "bytes": 24,
+      "top1_sim": 0.176
+    },
+    {
+      "i": 7,
+      "label": 0,
+      "topic": "the Transformer attention mechanism in deep learning",
+      "bytes": 12,
+      "top1_sim": 0.4999
+    },
+    {
+      "i": 8,
+      "label": 0,
+      "topic": "the Transformer attention mechanism in deep learning",
+      "bytes": 12,
+      "top1_sim": 0.4999
+    },
+    {
+      "i": 9,
+      "label": 0,
+      "topic": "the Transformer attention mechanism in deep learning",
+      "bytes": 12,
+      "top1_sim": 0.4999
+    },
+    {
+      "i": 10,
+      "label": 1,
+      "topic": "the rules and strategy of chess endgames",
+      "bytes": 26,
+      "top1_sim": 0.228
+    },
+    {
+      "i": 11,
+      "label": 0,
+      "topic": "the Transformer attention mechanism in deep learning",
+      "bytes": 12,
+      "top1_sim": 0.4999
+    },
+    {
+      "i": 12,
+      "label": 1,
+      "topic": "plate tectonics and volcanism",
+      "bytes": 26,
+      "top1_sim": 0.1551
+    },
+    {
+      "i": 13,
+      "label": 0,
+      "topic": "the Transformer attention mechanism in deep learning",
+      "bytes": 12,
+      "top1_sim": 0.4999
+    },
+    {
+      "i": 14,
+      "label": 0,
+      "topic": "the Transformer attention mechanism in deep learning",
+      "bytes": 12,
+      "top1_sim": 0.4999
+    },
+    {
+      "i": 15,
+      "label": 1,
+      "topic": "neural mechanisms of human memory",
+      "bytes": 36,
+      "top1_sim": 0.23
+    }
+  ]
+}

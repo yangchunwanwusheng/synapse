@@ -1,0 +1,207 @@
+#0 building with "desktop-linux" instance using docker driver
+
+#1 [internal] load build definition from Dockerfile
+#1 transferring dockerfile: 1.46kB 0.0s done
+#1 DONE 0.1s
+
+#2 [internal] load metadata for docker.io/openeuler/openeuler:24.03-lts
+#2 DONE 34.0s
+
+#3 [internal] load .dockerignore
+#3 transferring context: 260B done
+#3 DONE 0.1s
+
+#4 [ 1/10] FROM docker.io/openeuler/openeuler:24.03-lts@sha256:ace677f48c79ae6bc17046cb8c2940b38f7050afc752c8463e1553b9e7b60974
+#4 resolve docker.io/openeuler/openeuler:24.03-lts@sha256:ace677f48c79ae6bc17046cb8c2940b38f7050afc752c8463e1553b9e7b60974 0.1s done
+#4 ...
+
+#5 [internal] load build context
+#5 transferring context: 491.06kB 0.1s done
+#5 DONE 0.2s
+
+#4 [ 1/10] FROM docker.io/openeuler/openeuler:24.03-lts@sha256:ace677f48c79ae6bc17046cb8c2940b38f7050afc752c8463e1553b9e7b60974
+#4 sha256:052e33072c3e60d8d8de769bf083742a6e2a774361154dcece04417c950b76d5 0B / 1.29kB 0.2s
+#4 sha256:2181afffbdb5acaa22e1fc62aafd79a8ffbffbaf90bc523fd08f4664800e8f29 0B / 65.24MB 0.2s
+#4 sha256:052e33072c3e60d8d8de769bf083742a6e2a774361154dcece04417c950b76d5 1.29kB / 1.29kB 3.0s
+#4 sha256:052e33072c3e60d8d8de769bf083742a6e2a774361154dcece04417c950b76d5 1.29kB / 1.29kB 3.0s done
+#4 sha256:2181afffbdb5acaa22e1fc62aafd79a8ffbffbaf90bc523fd08f4664800e8f29 0B / 65.24MB 5.3s
+#4 sha256:2181afffbdb5acaa22e1fc62aafd79a8ffbffbaf90bc523fd08f4664800e8f29 4.19MB / 65.24MB 6.0s
+#4 sha256:2181afffbdb5acaa22e1fc62aafd79a8ffbffbaf90bc523fd08f4664800e8f29 8.39MB / 65.24MB 6.3s
+#4 sha256:2181afffbdb5acaa22e1fc62aafd79a8ffbffbaf90bc523fd08f4664800e8f29 12.58MB / 65.24MB 6.6s
+#4 sha256:2181afffbdb5acaa22e1fc62aafd79a8ffbffbaf90bc523fd08f4664800e8f29 16.78MB / 65.24MB 6.9s
+#4 sha256:2181afffbdb5acaa22e1fc62aafd79a8ffbffbaf90bc523fd08f4664800e8f29 20.97MB / 65.24MB 7.2s
+#4 sha256:2181afffbdb5acaa22e1fc62aafd79a8ffbffbaf90bc523fd08f4664800e8f29 25.17MB / 65.24MB 7.5s
+#4 sha256:2181afffbdb5acaa22e1fc62aafd79a8ffbffbaf90bc523fd08f4664800e8f29 30.41MB / 65.24MB 8.0s
+#4 sha256:2181afffbdb5acaa22e1fc62aafd79a8ffbffbaf90bc523fd08f4664800e8f29 32.51MB / 65.24MB 13.1s
+#4 sha256:2181afffbdb5acaa22e1fc62aafd79a8ffbffbaf90bc523fd08f4664800e8f29 36.70MB / 65.24MB 15.2s
+#4 sha256:2181afffbdb5acaa22e1fc62aafd79a8ffbffbaf90bc523fd08f4664800e8f29 40.89MB / 65.24MB 15.5s
+#4 sha256:2181afffbdb5acaa22e1fc62aafd79a8ffbffbaf90bc523fd08f4664800e8f29 45.09MB / 65.24MB 16.5s
+#4 sha256:2181afffbdb5acaa22e1fc62aafd79a8ffbffbaf90bc523fd08f4664800e8f29 49.28MB / 65.24MB 16.8s
+#4 sha256:2181afffbdb5acaa22e1fc62aafd79a8ffbffbaf90bc523fd08f4664800e8f29 53.48MB / 65.24MB 17.1s
+#4 sha256:2181afffbdb5acaa22e1fc62aafd79a8ffbffbaf90bc523fd08f4664800e8f29 59.77MB / 65.24MB 17.4s
+#4 sha256:2181afffbdb5acaa22e1fc62aafd79a8ffbffbaf90bc523fd08f4664800e8f29 65.24MB / 65.24MB 17.9s
+#4 sha256:2181afffbdb5acaa22e1fc62aafd79a8ffbffbaf90bc523fd08f4664800e8f29 65.24MB / 65.24MB 17.9s done
+#4 extracting sha256:2181afffbdb5acaa22e1fc62aafd79a8ffbffbaf90bc523fd08f4664800e8f29
+#4 extracting sha256:2181afffbdb5acaa22e1fc62aafd79a8ffbffbaf90bc523fd08f4664800e8f29 1.5s done
+#4 DONE 19.6s
+
+#4 [ 1/10] FROM docker.io/openeuler/openeuler:24.03-lts@sha256:ace677f48c79ae6bc17046cb8c2940b38f7050afc752c8463e1553b9e7b60974
+#4 extracting sha256:052e33072c3e60d8d8de769bf083742a6e2a774361154dcece04417c950b76d5 0.0s done
+#4 DONE 19.6s
+
+#6 [ 2/10] RUN dnf install -y python3 python3-pip && dnf clean all
+#6 7.160 OS                                              495 kB/s | 2.9 MB     00:05    
+#6 10.30 everything                                      5.7 MB/s |  16 MB     00:02    
+#6 13.18 EPOL                                            4.0 MB/s | 4.3 MB     00:01    
+#6 15.46 debuginfo                                       2.5 MB/s | 4.4 MB     00:01    
+#6 18.86 source                                          589 kB/s | 1.7 MB     00:02    
+#6 30.77 update                                          7.8 MB/s |  91 MB     00:11    
+#6 43.76 update-source                                   887 kB/s | 2.7 MB     00:03    
+#6 45.51 EPOL-update                                     616 kB/s | 910 kB     00:01    
+#6 46.95 Package python3-3.11.6-26.oe2403.x86_64 is already installed.
+#6 47.00 Dependencies resolved.
+#6 47.00 ================================================================================
+#6 47.00  Package                 Arch        Version                  Repository   Size
+#6 47.00 ================================================================================
+#6 47.00 Installing:
+#6 47.00  python3-pip             noarch      23.3.1-11.oe2403         update      3.4 M
+#6 47.00 Installing dependencies:
+#6 47.00  python3-setuptools      noarch      68.0.0-2.oe2403          update      1.6 M
+#6 47.00 
+#6 47.00 Transaction Summary
+#6 47.00 ================================================================================
+#6 47.00 Install  2 Packages
+#6 47.00 
+#6 47.00 Total download size: 4.9 M
+#6 47.00 Installed size: 22 M
+#6 47.00 Downloading Packages:
+#6 49.58 (1/2): python3-setuptools-68.0.0-2.oe2403.noarc 957 kB/s | 1.6 MB     00:01    
+#6 50.13 (2/2): python3-pip-23.3.1-11.oe2403.noarch.rpm  1.5 MB/s | 3.4 MB     00:02    
+#6 50.13 --------------------------------------------------------------------------------
+#6 50.13 Total                                           1.6 MB/s | 4.9 MB     00:03     
+#6 50.15 retrieving repo key for update unencrypted from http://repo.openeuler.org/openEuler-24.03-LTS/OS/x86_64/RPM-GPG-KEY-openEuler
+#6 50.36 update                                           14 kB/s | 3.0 kB     00:00    
+#6 50.44 Importing GPG key 0xB675600B:
+#6 50.44  Userid     : "openeuler <openeuler@compass-ci.com>"
+#6 50.44  Fingerprint: 8AA1 6BF9 F2CA 5244 010D CA96 3B47 7C60 B675 600B
+#6 50.44  From       : http://repo.openeuler.org/openEuler-24.03-LTS/OS/x86_64/RPM-GPG-KEY-openEuler
+#6 50.47 Key imported successfully
+#6 50.48 Running transaction check
+#6 50.49 Transaction check succeeded.
+#6 50.49 Running transaction test
+#6 50.51 Transaction test succeeded.
+#6 50.51 Running transaction
+#6 50.57   Preparing        :                                                        1/1 
+#6 50.57   Installing       : python3-setuptools-68.0.0-2.oe2403.noarch              1/2 
+#6 50.70   Installing       : python3-pip-23.3.1-11.oe2403.noarch                    2/2 
+#6 50.96   Running scriptlet: python3-pip-23.3.1-11.oe2403.noarch                    2/2 
+#6 51.03   Verifying        : python3-pip-23.3.1-11.oe2403.noarch                    1/2 
+#6 51.03   Verifying        : python3-setuptools-68.0.0-2.oe2403.noarch              2/2 
+#6 51.06 
+#6 51.06 Installed:
+#6 51.06   python3-pip-23.3.1-11.oe2403.noarch python3-setuptools-68.0.0-2.oe2403.noarch
+#6 51.06 
+#6 51.06 Complete!
+#6 51.20 56 files removed
+#6 DONE 51.2s
+
+#7 [ 3/10] RUN python3 -m pip install --no-cache-dir uv
+#7 1.640 Collecting uv
+#7 2.105   Downloading uv-0.11.23-py3-none-manylinux_2_17_x86_64.manylinux2014_x86_64.whl.metadata (11 kB)
+#7 2.272 Downloading uv-0.11.23-py3-none-manylinux_2_17_x86_64.manylinux2014_x86_64.whl (25.4 MB)
+#7 4.634    ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━ 25.4/25.4 MB 13.4 MB/s eta 0:00:00
+#7 4.687 Installing collected packages: uv
+#7 5.006 Successfully installed uv-0.11.23
+#7 5.006 WARNING: Running pip as the 'root' user can result in broken permissions and conflicting behaviour with the system package manager. It is recommended to use a virtual environment instead: https://pip.pypa.io/warnings/venv
+#7 DONE 5.8s
+
+#8 [ 4/10] WORKDIR /app
+#8 DONE 0.1s
+
+#9 [ 5/10] COPY pyproject.toml uv.lock README.md ./
+#9 DONE 0.1s
+
+#10 [ 6/10] COPY src ./src
+#10 DONE 0.1s
+
+#11 [ 7/10] RUN uv sync --frozen --no-dev --extra api
+#11 0.274 Using CPython 3.11.6 interpreter at: /usr/bin/python3
+#11 0.274 Creating virtual environment at: .venv
+#11 0.287    Building synapse-mas @ file:///app
+#11 1.148 Downloading openai (1.3MiB)
+#11 1.149 Downloading pillow (6.8MiB)
+#11 1.150 Downloading pygments (1.2MiB)
+#11 1.150 Downloading pydantic-core (2.0MiB)
+#11 1.150 Downloading hf-xet (4.3MiB)
+#11 2.067  Downloaded openai
+#11 2.076  Downloaded pygments
+#11 2.289  Downloaded pydantic-core
+#11 2.816  Downloaded hf-xet
+#11 3.138  Downloaded pillow
+#11 4.101       Built synapse-mas @ file:///app
+#11 4.102 Prepared 39 packages in 3.82s
+#11 4.131 Installed 39 packages in 28ms
+#11 4.131  + annotated-doc==0.0.4
+#11 4.131  + annotated-types==0.7.0
+#11 4.131  + anyio==4.14.0
+#11 4.131  + certifi==2026.6.17
+#11 4.131  + charset-normalizer==3.4.7
+#11 4.131  + click==8.4.1
+#11 4.131  + distro==1.9.0
+#11 4.131  + filelock==3.29.4
+#11 4.131  + fsspec==2026.6.0
+#11 4.131  + h11==0.16.0
+#11 4.131  + hf-xet==1.5.1
+#11 4.131  + httpcore==1.0.9
+#11 4.131  + httpx==0.28.1
+#11 4.131  + huggingface-hub==1.20.0
+#11 4.131  + idna==3.18
+#11 4.131  + jinja2==3.1.6
+#11 4.131  + jiter==0.15.0
+#11 4.131  + markdown-it-py==4.2.0
+#11 4.131  + markupsafe==3.0.3
+#11 4.131  + mdurl==0.1.2
+#11 4.131  + openai==2.43.0
+#11 4.131  + packaging==26.2
+#11 4.131  + pillow==12.2.0
+#11 4.131  + pydantic==2.13.4
+#11 4.131  + pydantic-core==2.46.4
+#11 4.131  + pygments==2.20.0
+#11 4.131  + python-dotenv==1.2.2
+#11 4.131  + pyyaml==6.0.3
+#11 4.131  + requests==2.34.2
+#11 4.131  + rich==15.0.0
+#11 4.131  + shellingham==1.5.4
+#11 4.131  + smolagents==1.26.0
+#11 4.131  + sniffio==1.3.1
+#11 4.131  + synapse-mas==0.1.0 (from file:///app)
+#11 4.131  + tqdm==4.68.3
+#11 4.131  + typer==0.25.1
+#11 4.131  + typing-extensions==4.15.0
+#11 4.131  + typing-inspection==0.4.2
+#11 4.131  + urllib3==2.7.0
+#11 DONE 4.2s
+
+#12 [ 8/10] COPY configs ./configs
+#12 DONE 0.1s
+
+#13 [ 9/10] COPY tests ./tests
+#13 DONE 0.1s
+
+#14 [10/10] COPY scripts ./scripts
+#14 DONE 0.1s
+
+#15 exporting to image
+#15 exporting layers
+#15 exporting layers 2.2s done
+#15 exporting manifest sha256:7349774b90923706fba0a40b2ef29d447fe9925bb4b314b5f90e332b97b095ef 0.0s done
+#15 exporting config sha256:3f5758ad0b8feb598897026a9f8974e9ba540be53caab61e045d0a7266c9da4c 0.0s done
+#15 exporting attestation manifest sha256:763ecdf4838b090bbb2bb653b61378cffacab7f892ce52d8f345b1714eedffe4
+#15 exporting attestation manifest sha256:763ecdf4838b090bbb2bb653b61378cffacab7f892ce52d8f345b1714eedffe4 0.1s done
+#15 exporting manifest list sha256:3180b23844abe193809f63c0f7f34ed1b03247de9745d040e7a5ca7081113b7f 0.0s done
+#15 naming to docker.io/library/synapse:latest done
+#15 unpacking to docker.io/library/synapse:latest
+#15 unpacking to docker.io/library/synapse:latest 1.4s done
+#15 DONE 3.8s
+
+View build details: docker-desktop://dashboard/build/desktop-linux/desktop-linux/fxfn40t31v1x1wq3nmbsbnfrg

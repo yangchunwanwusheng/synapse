@@ -1,0 +1,7 @@
+== k-sweep: N=50 ks=[3, 4, 5, 6] retrieval=bridge model=Qwen3-30B-A3B-Instruct-2507 ==
+text baseline: F1=0.7085 tokens=81348
+  k=3: token -73.5% | gold_recall 0.86 | synF1 0.6548 | dF1 -0.054 CI[-0.1551, 0.0507] | WORSE | w/t/l 4/38/8
+  k=4: token -65.2% | gold_recall 0.91 | synF1 0.6469 | dF1 -0.062 CI[-0.1596, 0.0404] | WORSE | w/t/l 3/38/9
+  k=5: token -56.6% | gold_recall 0.91 | synF1 0.6606 | dF1 -0.048 CI[-0.1442, 0.0507] | WORSE | w/t/l 3/39/8
+  k=6: token -47.2% | gold_recall 0.97 | synF1 0.6577 | dF1 -0.051 CI[-0.1489, 0.0505] | WORSE | w/t/l 3/39/8
+  artifacts -> runs\hotpot_ksweep_20260621_190107\result.json

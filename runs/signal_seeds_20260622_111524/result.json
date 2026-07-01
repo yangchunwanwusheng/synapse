@@ -1,0 +1,161 @@
+{
+  "config": {
+    "embed_dim": 64,
+    "quant_grid": 64,
+    "sparsity_eps": 0,
+    "verify_threshold": 0.97,
+    "n_facts": 40,
+    "retrieval_k": 5,
+    "hit_threshold": 0.15,
+    "w_keyword": 0.3,
+    "w_tag": 0.2,
+    "w_semantic": 0.5,
+    "rounds": 10,
+    "seeds": [
+      0,
+      1,
+      2
+    ],
+    "qa_sentences_k": 4,
+    "qa_history_k": 2,
+    "qa_para_k": 3,
+    "qa_retrieval": "single",
+    "llm_backend": "paratera",
+    "embedder": "api",
+    "model": "Qwen3-30B-A3B-Instruct-2507",
+    "api_base": "https://llmapi.paratera.com/v1",
+    "api_key_env": "PARATERA_API_KEY",
+    "temperature": 0.0,
+    "embed_model": "GLM-Embedding-3"
+  },
+  "rounds": 8,
+  "runs": [
+    {
+      "repeat": 0,
+      "linked_first": 2109.0,
+      "linked_second": 1770.8,
+      "linked_drop_pct": 16.0,
+      "neg_first": 3825.0,
+      "neg_second": 3763.0,
+      "neg_drop_pct": 1.6,
+      "linked_hit": 0.875,
+      "neg_hit": 0.167,
+      "converged_ratio": 0.471,
+      "consistent": true,
+      "contraction_linked": [
+        3633,
+        867,
+        2244,
+        1692,
+        1266,
+        1338,
+        2124,
+        2355
+      ],
+      "contraction_negative": [
+        3588,
+        3978,
+        3909,
+        3789,
+        3789,
+        3711
+      ]
+    },
+    {
+      "repeat": 1,
+      "linked_first": 2052.8,
+      "linked_second": 1653.8,
+      "linked_drop_pct": 19.4,
+      "neg_first": 3840.0,
+      "neg_second": 3828.0,
+      "neg_drop_pct": 0.3,
+      "linked_hit": 0.875,
+      "neg_hit": 0.167,
+      "converged_ratio": 0.432,
+      "consistent": true,
+      "contraction_linked": [
+        3537,
+        1893,
+        1668,
+        1113,
+        1806,
+        1254,
+        1929,
+        1626
+      ],
+      "contraction_negative": [
+        3636,
+        3909,
+        3975,
+        3756,
+        3924,
+        3804
+      ]
+    },
+    {
+      "repeat": 2,
+      "linked_first": 1985.2,
+      "linked_second": 1952.2,
+      "linked_drop_pct": 1.7,
+      "neg_first": 3813.0,
+      "neg_second": 3792.0,
+      "neg_drop_pct": 0.6,
+      "linked_hit": 0.875,
+      "neg_hit": 0.167,
+      "converged_ratio": 0.515,
+      "consistent": true,
+      "contraction_linked": [
+        3714,
+        1869,
+        1227,
+        1131,
+        1707,
+        2100,
+        2355,
+        1647
+      ],
+      "contraction_negative": [
+        3588,
+        3870,
+        3981,
+        3858,
+        3735,
+        3783
+      ]
+    }
+  ],
+  "summary": {
+    "linked_drop_pct": {
+      "mean": 12.3667,
+      "std": 9.3927,
+      "n": 3
+    },
+    "neg_drop_pct": {
+      "mean": 0.8333,
+      "std": 0.6807,
+      "n": 3
+    },
+    "linked_second_bytes": {
+      "mean": 1792.2667,
+      "std": 150.3538,
+      "n": 3
+    },
+    "neg_second_bytes": {
+      "mean": 3794.3333,
+      "std": 32.5628,
+      "n": 3
+    },
+    "linked_hit": {
+      "mean": 0.875,
+      "std": 0.0,
+      "n": 3
+    },
+    "neg_hit": {
+      "mean": 0.167,
+      "std": 0.0,
+      "n": 3
+    },
+    "n_consistent": 3,
+    "n_repeats": 3
+  }
+}

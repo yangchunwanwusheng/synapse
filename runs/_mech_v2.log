@@ -1,0 +1,73 @@
+== MECHANISM exp=all rounds=10 backend=paratera embedder=api model=Qwen3-30B-A3B-Instruct-2507 ==
+[floor] online 2010.6->1026.6 (drop 48.9%) | oracle floor 1155.3 | second/floor=0.889 -> runs\mech_floor_20260622_165459
+Error in code parsing:
+Your code snippet is invalid, because the regex pattern <code>(.*?)</code> was 
+not found in it.
+Here is your code snippet:
+final_answer(len(evidence.split()))</code>
+It seems like you're trying to return the final answer, you can do it as 
+follows:
+<code>
+final_answer("YOUR FINAL ANSWER HERE")
+</code>
+Make sure to provide correct code blobs.
+Code parsing failed on line 1 due to: SyntaxError: invalid syntax (<unknown>, 
+line 1)
+` and `
+ ^
+[drift] pre_last 1323 -> post_first 3858 (rebound 191.6%) | post re-contract drop 35.9% -> runs\mech_drift_20260622_165459
+[ablation] full            : 1719.0->1325.4 (drop 22.9%) mean 1522.2
+Error in code parsing:
+Your code snippet is invalid, because the regex pattern <code>(.*?)</code> was 
+not found in it.
+Here is your code snippet:
+final_answer(len(evidence.split()))</code>
+It seems like you're trying to return the final answer, you can do it as 
+follows:
+<code>
+final_answer("YOUR FINAL ANSWER HERE")
+</code>
+Make sure to provide correct code blobs.
+Code parsing failed on line 1 due to: SyntaxError: invalid syntax (<unknown>, 
+line 1)
+` and `
+ ^
+Code parsing failed on line 1 due to: SyntaxError: invalid syntax (<unknown>, 
+line 1)
+` and `
+ ^
+Reached max steps.
+[ablation] no-tom          : 3601.8->3575.4 (drop 0.7%) mean 3588.6
+[ablation] no-consolidation: 1877.4->2201.4 (drop -17.3%) mean 2039.4
+Error in code parsing:
+Your code snippet is invalid, because the regex pattern <code>(.*?)</code> was 
+not found in it.
+Here is your code snippet:
+final_answer(len(evidence.split()))</code>
+It seems like you're trying to return the final answer, you can do it as 
+follows:
+<code>
+final_answer("YOUR FINAL ANSWER HERE")
+</code>
+Make sure to provide correct code blobs.
+Error in code parsing:
+Your code snippet is invalid, because the regex pattern <code>(.*?)</code> was 
+not found in it.
+Here is your code snippet:
+final_answer(len(evidence.split()))</code>
+It seems like you're trying to return the final answer, you can do it as 
+follows:
+<code>
+final_answer("YOUR FINAL ANSWER HERE")
+</code>
+Make sure to provide correct code blobs.
+Code parsing failed on line 1 due to: SyntaxError: invalid syntax (<unknown>, 
+line 1)
+and
+ ^
+Code parsing failed on line 1 due to: SyntaxError: invalid syntax (<unknown>, 
+line 1)
+and
+ ^
+Reached max steps.
+[ablation] no-residual     : 4108.0->4108.0 (drop 0.0%) mean 4108.0

@@ -1,0 +1,4 @@
+== k-sweep: N=200 ks=[3] retrieval=bridge model=Qwen3-30B-A3B-Instruct-2507 ==
+text baseline: F1=0.6708 tokens=301130
+  k=3: token -71.8% | gold_recall 0.838 | synF1 0.6323 | dF1 -0.038 CI[-0.0978, 0.0193] | WORSE | w/t/l 26/142/32
+  artifacts -> runs\hotpot_ksweep_20260621_231046\result.json
