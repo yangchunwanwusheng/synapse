@@ -1,0 +1,48 @@
+# 机密
+.env
+.env.*
+!.env.example
+*.key
+*.pem
+
+# Python
+__pycache__/
+*.py[cod]
+*.egg-info/
+.venv/
+.uv/
+build/
+dist/
+
+# 运行产物：仅保留赛题 M7/M8 必需的 5 个 run，其余 run 不进仓库
+*.log
+runs/*/
+!runs/signal_20260620_152728/
+!runs/m7_20260620_214354/
+!runs/coqa_20260621_111342/
+!runs/hotpot_stats_20260621_182630/
+!runs/hotpot_ksweep_20260621_231046/
+
+# 论文未发表内容（不在本仓库开源）
+SYNAPSE.tex
+SYNAPSE.pdf
+SYNAPSE_architecture.drawio
+00-project.yaml
+_state/
+01-idea/
+02-design/
+04-analysis/
+.claude/
+
+# LaTeX 中间件
+*.aux
+*.fls
+*.fdb_latexmk
+*.synctex.gz
+*.toc
+*.out
+*.xdv
+
+# OS
+.DS_Store
+Thumbs.db

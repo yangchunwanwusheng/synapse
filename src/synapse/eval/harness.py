@@ -1,0 +1,60 @@
+"""A/B 评测台（赛题 M3 双模式对照 + M9 ≥10 轮连续任务）。
+
+同一任务序列分别跑 text 模式（无状态、无记忆基线）与 synapse 模式（共享记忆持续累积），
+输出每轮 Metrics 轨迹——synapse 的 nontext_bytes 随累计经验下降。
+"""
+from __future__ import annotations
+
+
+class ABRunner:
+    def __init__(self, cfg):
+        self.cfg = cfg
+
+    def run(self, tasks) -> dict:
+        from ..modes.text_mode import run_text
+        from ..modes.synapse_mode import SynapseSession
+        from .metrics import improvement
+
+        text_traj, syn_traj = [], []
+
+        # text 基线：每任务独立、无记忆
+        for t in tasks:
+            text_traj.append(run_text(t, self.cfg)["metrics"])
+
+        # synapse：共享记忆跨任务累积
+        session = SynapseSession(self.cfg)
+        for t in tasks:
+            syn_traj.append(session.run_task(t)["metrics"])
+
+        text_total = _agg(text_traj)
+        syn_total = _agg(syn_traj)
+        return {
+            "rounds": len(tasks),
+            "text_trajectory": [m.summary() for m in text_traj],
+            "synapse_trajectory": [m.summary() for m in syn_traj],
+            "text_total": text_total.summary(),
+            "synapse_total": syn_total.summary(),
+            "improvement": improvement(text_total, syn_total),
+            "contraction_bytes": [m.nontext_bytes for m in syn_traj],  # 非文本字节轨迹 y 轴
+        }
+
+
+def _agg(traj):
+    from .metrics import Metrics
+    agg = Metrics(mode=traj[0].mode if traj else "")
+    for m in traj:
+        agg.messages += m.messages
+        agg.text_bytes += m.text_bytes
+        agg.text_tokens += m.text_tokens
+        agg.header_bytes += m.header_bytes
+        agg.nontext_transfers += m.nontext_transfers
+        agg.nontext_bytes += m.nontext_bytes
+        agg.fallbacks += m.fallbacks
+        agg.memory_queries += m.memory_queries
+        agg.memory_hits += m.memory_hits
+        agg.llm_tokens += m.llm_tokens
+        agg.latency_s += m.latency_s
+        agg.quality += m.quality
+    if traj:
+        agg.quality /= len(traj)
+    return agg
