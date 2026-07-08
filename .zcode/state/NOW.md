@@ -30,6 +30,7 @@
   - 3 独占点全部成立（黑盒/统一边信息/漂移传感）
   - 新增 closest work：Interlat (ACL'26)、CIPHER (ICLR'24)、Semantic R-D (2604.09521)
   - ⚠️ 关键更正：LatentMAS v3 无"black-box future work"原话（P1-3 精读确认），改用 SDE §7 真实自述
+  - ✅ **全文精读校验完成**：LatentMAS/SDE/HyLaT/TokenCoh/AgentSight/EquiMem/RCR/MemClaw/SemR-D/Unexpectedness 共 10 篇全文精读（不止摘要），8 篇区分点全部成立，无隐藏撞车
 - P2 证据补强：真实任务机制外推 + vs LatentMAS 公平对比（7-10天）← 下一步
 - P3 比赛交付收尾：演示视频 + openEuler 实测 + 可选系统加分项（2-3天）
 - P4 论文起草（nature-writing，5-7天）
