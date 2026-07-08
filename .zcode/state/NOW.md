@@ -1,7 +1,7 @@
 # SYNAPSE 状态快照（2026-07-08）
 
 ## 当前阶段
-**P0 完成（G0 通过）→ 准备进 P1**。idea 再定位完成，新 framing = 记忆即边信息。
+**P0 完成（G0 通过）→ P1 完成（G1 通过）→ 准备进 P2**。idea 再定位完成，新 framing = 记忆即边信息。
 
 ## 代码现状
 - 2353 行，5 模块，60 真实实验（runs/）
@@ -26,11 +26,20 @@
 
 ## 待办路线图
 - **P0 仓库迁移 + MR 工作流 ✅ 完成（G0 通过）**
-- P1 撞车复审 + 独占点 grep 验证（2天）← 下一步
-- P2 证据补强：真实任务机制外推 + vs LatentMAS 公平对比（7-10天）
+- **P1 撞车复审 + 独占点验证 ✅ 完成（G1 通过）**
+  - 3 独占点全部成立（黑盒/统一边信息/漂移传感）
+  - 新增 closest work：Interlat (ACL'26)、CIPHER (ICLR'24)、Semantic R-D (2604.09521)
+  - ⚠️ 关键更正：LatentMAS v3 无"black-box future work"原话（P1-3 精读确认），改用 SDE §7 真实自述
+- P2 证据补强：真实任务机制外推 + vs LatentMAS 公平对比（7-10天）← 下一步
 - P3 比赛交付收尾：演示视频 + openEuler 实测 + 可选系统加分项（2-3天）
 - P4 论文起草（nature-writing，5-7天）
 - P5 投稿前自审 + 投递（2-3天）
+
+## P1 关键产出（KB 内）
+- `Writing/foundation/01_research_canon.md` §D/§E 更新（closest-work + 3 独占点验证）
+- `Writing/foundation/02_evidence_table.md` §B closest-work table 补全（13 行，6 列）
+- `docs/p1-collision-audit-report.md`（完整撞车复审报告）
+- `Sources/Papers/LatentMAS.md` + `Sources/Papers/SDE.md`（精读笔记 + 白盒证据）
 
 ## 关键文件位置
 - Obsidian KB: D:/learnevery/Research/synapse-repositioning/
