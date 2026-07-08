@@ -1,0 +1,30 @@
+# Repo-local binding metadata for synapse-repositioning
+# This is the runtime binding layer only. Project knowledge lives in:
+#   D:/learnevery/Research/synapse-repositioning/
+
+project_id: synapse-repositioning
+project_slug: synapse-repositioning
+repo_roots:
+  - "C:/Users/oobbee/Desktop/synapse"
+vault_root: "D:/learnevery"
+project_root: "D:/learnevery/Research/synapse-repositioning"
+hub_note: "00-Hub.md"
+note_language: zh-CN
+status: active
+auto_sync: manual
+
+# 联动工作流说明
+# - obsidian KB (D:/learnevery/Research/synapse-repositioning/) 是知识层
+# - synapse 代码 (C:/Users/oobbee/Desktop/synapse/) 是实现层
+# - zotero 是文献层（关键撞车论文入库）
+# - arxiv MCP 用于持续监测新论文（watch_topic）
+#
+# 工作流：
+# 1. 修改代码 → 在 KB Experiments/ 记录实验设计
+# 2. 跑实验 → 结果写入 synapse/runs/ + KB Results/Reports/
+# 3. 读论文 → zotero 入库 + KB Sources/Papers/ 笔记
+# 4. 写论文 → KB Writing/drafts/ + 引用 foundation 5 文件
+
+recent_sync:
+  date: 2026-07-07
+  summary: "初始化绑定。foundation 5 文件已产出，新 framing=记忆即边信息"
