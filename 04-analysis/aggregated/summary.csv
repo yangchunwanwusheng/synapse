@@ -1,0 +1,44 @@
+experiment_id,metric,n,method:value pairs
+EC1-signal-seeds,linked_drop_pct,1,synapse=12.3667
+EC1-signal-seeds,linked_hit,1,synapse=0.875
+EC1-signal-seeds,linked_second_bytes,1,synapse=1792.2667
+EC1-signal-seeds,n_consistent,1,synapse=3
+EC1-signal-seeds,neg_drop_pct,1,synapse=0.8333
+EC1-signal-seeds,neg_hit,1,synapse=0.167
+EC1-signal-seeds,neg_second_bytes,1,synapse=3794.3333
+coqa,f1,2,text=0.7333; synapse=0.7477
+coqa,hit_rate,2,text=0.0; synapse=0.921
+coqa,llm_total_tokens,2,text=20224; synapse=18558
+coqa,token_saved_pct,1,synapse=8.24
+hotpot-bridge-N200,dF1_ci_hi,1,bridge-k3=0.0193
+hotpot-bridge-N200,dF1_ci_lo,1,bridge-k3=-0.0978
+hotpot-bridge-N200,gold_recall,1,bridge-k3=0.838
+hotpot-bridge-N200,paired_dF1,1,bridge-k3=-0.0385
+hotpot-bridge-N200,token_saved_pct,1,bridge-k3=71.82
+hotpot-bridge-N50,dF1_ci_hi,4,bridge-k3=0.0507; bridge-k4=0.0404; bridge-k5=0.0507; bridge-k6=0.0505
+hotpot-bridge-N50,dF1_ci_lo,4,bridge-k3=-0.1551; bridge-k4=-0.1596; bridge-k5=-0.1442; bridge-k6=-0.1489
+hotpot-bridge-N50,gold_recall,4,bridge-k3=0.86; bridge-k4=0.91; bridge-k5=0.91; bridge-k6=0.97
+hotpot-bridge-N50,paired_dF1,4,bridge-k3=-0.0537; bridge-k4=-0.0616; bridge-k5=-0.0479; bridge-k6=-0.0508
+hotpot-bridge-N50,token_saved_pct,4,bridge-k3=73.51; bridge-k4=65.18; bridge-k5=56.58; bridge-k6=47.17
+hotpot-k3-single,dF1_ci_hi,1,synapse=-0.0537
+hotpot-k3-single,dF1_ci_lo,1,synapse=-0.1726
+hotpot-k3-single,f1,2,text=0.6961; synapse=0.5843
+hotpot-k3-single,gold_recall,1,synapse=0.78
+hotpot-k3-single,paired_dF1,1,synapse=-0.1118
+hotpot-k3-single,token_saved_pct,1,synapse=73.77
+hotpot-k3-single,token_saved_std,1,synapse=0.01
+hotpot-single-N50,dF1_ci_hi,5,single-k3=-0.0099; single-k4=0.0131; single-k5=0.0359; single-k6=0.0604; single-k8=0.0433
+hotpot-single-N50,dF1_ci_lo,5,single-k3=-0.2289; single-k4=-0.2068; single-k5=-0.1764; single-k6=-0.1428; single-k8=-0.134
+hotpot-single-N50,gold_recall,5,single-k3=0.78; single-k4=0.82; single-k5=0.84; single-k6=0.91; single-k8=0.96
+hotpot-single-N50,paired_dF1,5,single-k3=-0.12; single-k4=-0.0968; single-k5=-0.0729; single-k6=-0.0432; single-k8=-0.0459
+hotpot-single-N50,token_saved_pct,5,single-k3=73.76; single-k4=65.41; single-k5=56.64; single-k6=46.88; single-k8=24.92
+hotpot-twohop-N50,dF1_ci_hi,4,twohop-k3=-0.0029; twohop-k4=0.0497; twohop-k5=0.0354; twohop-k6=0.0317
+hotpot-twohop-N50,dF1_ci_lo,4,twohop-k3=-0.2381; twohop-k4=-0.1882; twohop-k5=-0.1761; twohop-k6=-0.1754
+hotpot-twohop-N50,gold_recall,4,twohop-k3=0.75; twohop-k4=0.85; twohop-k5=0.86; twohop-k6=0.9
+hotpot-twohop-N50,paired_dF1,4,twohop-k3=-0.1215; twohop-k4=-0.0688; twohop-k5=-0.0718; twohop-k6=-0.0711
+hotpot-twohop-N50,token_saved_pct,4,twohop-k3=72.15; twohop-k4=63.09; twohop-k5=54.24; twohop-k6=43.93
+m7,hit_rate,2,g1=0.8; g2=1.0
+m7,mean_nontext_bytes,2,g1=52.0; g2=49.6
+signal,bytes_first_half,2,synapse=48.4; synapse=54.67
+signal,bytes_second_half,2,synapse=37.2; synapse=70.0
+signal,hit_rate,2,synapse=0.9; synapse=0.167

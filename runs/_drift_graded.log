@@ -1,0 +1,2 @@
+== DRIFT-GRADED warmup=5 n_each=8 backend=paratera ==
+[drift_graded] bytes fam/evo/nov = 1386.75/2614.5/3841.5 | sim = 0.549/0.552/0.177 | fam-vs-evolved AUC residual=1.0 vs retrieval=0.2266 -> runs\drift_graded_20260622_175400

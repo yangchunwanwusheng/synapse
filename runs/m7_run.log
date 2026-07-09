@@ -1,0 +1,39 @@
+== M7: backend=paratera model=Qwen3-30B-A3B-Instruct-2507 topic='the Transformer attention mechanism in deep learning' G1=5 → G2=5（同会话，G2 复用 G1 记忆）==
+Code execution failed at line 'assert len(conclusion.split()) == 164, 
+f"Expected 164 words, got {len(conclusion.split())}"' due to: AssertionError: 
+Expected 164 words, got 115
+{
+  "G1": {
+    "n": 5,
+    "mean_nontext_bytes": 52.0,
+    "bytes": [
+      60,
+      52,
+      40,
+      56,
+      52
+    ],
+    "hit_rate": 0.8
+  },
+  "G2": {
+    "n": 5,
+    "mean_nontext_bytes": 49.6,
+    "bytes": [
+      54,
+      46,
+      38,
+      64,
+      46
+    ],
+    "hit_rate": 1.0
+  },
+  "improvement": {
+    "wire_bytes_saved_pct": 40.67,
+    "token_saved_pct": 21.25,
+    "latency_saved_pct": -1.04,
+    "synapse_hit_rate": 0.9,
+    "synapse_fallbacks": 0
+  }
+}
+  [PASS] 跨组记忆复用 (G2 均字节 49.6 ≤ G1 52.0; G2 命中 1.0 ≥ G1 0.8)
+  artifacts -> runs\m7_20260620_214354/result.json

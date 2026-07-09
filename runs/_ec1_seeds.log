@@ -1,0 +1,47 @@
+== EC1 signal x3: rounds=8 topic='the Transformer attention mechanism in deep learning' model=Qwen3-30B-A3B-Instruct-2507 embedder=api ==
+  repeat 0: linked 2109.0->1770.8 (drop 16.0%) | neg 3825.0->3763.0 (drop 1.6%) | hit L0.875/N0.167 | ratio=0.471 | OK
+Code execution failed at line 'assert word_count == 153, f"Expected 153 words, 
+got {word_count}"' due to: AssertionError: Expected 153 words, got 122
+Code execution failed at line 'assert word_count == 153, f"Expected 153 words, 
+got {word_count}"' due to: AssertionError: Expected 153 words, got 180
+Code execution failed at line 'assert word_count == 153, f"Expected 153 words, 
+got {word_count}"' due to: AssertionError: Expected 153 words, got 113
+Reached max steps.
+  repeat 1: linked 2052.8->1653.8 (drop 19.4%) | neg 3840.0->3828.0 (drop 0.3%) | hit L0.875/N0.167 | ratio=0.432 | OK
+  repeat 2: linked 1985.2->1952.2 (drop 1.7%) | neg 3813.0->3792.0 (drop 0.6%) | hit L0.875/N0.167 | ratio=0.515 | OK
+{
+  "linked_drop_pct": {
+    "mean": 12.3667,
+    "std": 9.3927,
+    "n": 3
+  },
+  "neg_drop_pct": {
+    "mean": 0.8333,
+    "std": 0.6807,
+    "n": 3
+  },
+  "linked_second_bytes": {
+    "mean": 1792.2667,
+    "std": 150.3538,
+    "n": 3
+  },
+  "neg_second_bytes": {
+    "mean": 3794.3333,
+    "std": 32.5628,
+    "n": 3
+  },
+  "linked_hit": {
+    "mean": 0.875,
+    "std": 0.0,
+    "n": 3
+  },
+  "neg_hit": {
+    "mean": 0.167,
+    "std": 0.0,
+    "n": 3
+  },
+  "n_consistent": 3,
+  "n_repeats": 3
+}
+  [C1-CONSISTENT] 3/3 repeats 满足 关联收缩>负例 且 命中更高
+  artifacts -> runs\signal_seeds_20260622_111524\result.json

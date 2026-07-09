@@ -1,0 +1,89 @@
+{
+  "config": {
+    "embed_dim": 64,
+    "quant_grid": 64,
+    "sparsity_eps": 0,
+    "verify_threshold": 0.97,
+    "n_facts": 40,
+    "retrieval_k": 5,
+    "hit_threshold": 0.15,
+    "w_keyword": 0.3,
+    "w_tag": 0.2,
+    "w_semantic": 0.5,
+    "rounds": 10,
+    "seeds": [
+      0,
+      1,
+      2
+    ],
+    "qa_sentences_k": 4,
+    "qa_history_k": 2,
+    "qa_para_k": 3,
+    "qa_retrieval": "single",
+    "llm_backend": "paratera",
+    "embedder": "api",
+    "model": "Qwen3-30B-A3B-Instruct-2507",
+    "api_base": "https://llmapi.paratera.com/v1",
+    "api_key_env": "PARATERA_API_KEY",
+    "temperature": 0.0,
+    "embed_model": "GLM-Embedding-3"
+  },
+  "rounds": 2,
+  "runs": [
+    {
+      "repeat": 0,
+      "linked_first": 3609.0,
+      "linked_second": 1071.0,
+      "linked_drop_pct": 70.3,
+      "neg_first": 3639.0,
+      "neg_second": 3930.0,
+      "neg_drop_pct": -8.0,
+      "linked_hit": 0.5,
+      "neg_hit": 0.0,
+      "converged_ratio": 0.273,
+      "consistent": true,
+      "contraction_linked": [
+        3609,
+        1071
+      ],
+      "contraction_negative": [
+        3639,
+        3930
+      ]
+    }
+  ],
+  "summary": {
+    "linked_drop_pct": {
+      "mean": 70.3,
+      "std": 0.0,
+      "n": 1
+    },
+    "neg_drop_pct": {
+      "mean": -8.0,
+      "std": 0.0,
+      "n": 1
+    },
+    "linked_second_bytes": {
+      "mean": 1071.0,
+      "std": 0.0,
+      "n": 1
+    },
+    "neg_second_bytes": {
+      "mean": 3930.0,
+      "std": 0.0,
+      "n": 1
+    },
+    "linked_hit": {
+      "mean": 0.5,
+      "std": 0.0,
+      "n": 1
+    },
+    "neg_hit": {
+      "mean": 0.0,
+      "std": 0.0,
+      "n": 1
+    },
+    "n_consistent": 1,
+    "n_repeats": 1
+  }
+}

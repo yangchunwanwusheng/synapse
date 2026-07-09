@@ -1,0 +1,35 @@
+# 机密
+.env
+.env.*
+!.env.example
+*.key
+*.pem
+
+# Python
+__pycache__/
+*.py[cod]
+*.egg-info/
+.venv/
+.uv/
+build/
+dist/
+
+# 运行产物：全部纳入（私有仓库，团队共享完整实验记录）
+# *.log  与 runs/  均提交
+
+# 论文与科研内容（私有仓库，团队共享）：
+# SYNAPSE.tex/.pdf/.drawio、00-project.yaml、_state/、01-idea/、02-design/、04-analysis/、.claude/
+# 均纳入版本控制。
+
+# LaTeX 中间件
+*.aux
+*.fls
+*.fdb_latexmk
+*.synctex.gz
+*.toc
+*.out
+*.xdv
+
+# OS
+.DS_Store
+Thumbs.db

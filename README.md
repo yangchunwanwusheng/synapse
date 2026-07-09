@@ -1,36 +1,152 @@
-# 赛题题目：一种面向多智能体协作的低开销通信、状态传递与共享记忆机制（社区赛题）
+# SYNAPSE — 面向多智能体协作的低开销通信、非文本状态传递与共享记忆原型系统
 
-## 赛题说明：
-随着大模型应用从单 Agent 问答逐步扩展到多 Agent 协同执行，智能系统正在从“单点生成”向“分工协作”演进。在检索增强生成、复杂任务规划、代码协作、办公自动化、知识分析等场景中，往往需要多个 Agent 分别承担规划、检索、执行、总结、生成等不同角色，并通过相互协作完成复杂任务。当前主流多 Agent 系统大多以自然语言或 JSON 作为通信媒介，即一个 Agent 将其中间结果组织成文本，再传递给其他 Agent 进行解析和继续处理。这种方式虽然通用性较好，但在多轮、多 Agent、复杂任务场景下存在明显不足：一是通信内容冗长、重复上下文多，token 消耗高；二是中间结果需要在“内部状态—文本—内部状态”之间反复转换，导致时延增加并可能带来语义损耗；三是任务执行过程中形成的中间知识和经验难以沉淀，系统在处理相似任务时往往仍需从头开始，缺乏持续积累和复用能力。
-本赛题面向多智能体协作系统中的基础设施问题，要求选手围绕**低开销通信、非文本状态传递、共享记忆复用**三个方面，设计并实现一套可运行的原型系统。系统一方面需要通过结构化通信协议替代冗长自然语言交互，将 Agent 间传递的内容收敛为动作、参数、结果、能力等高密度语义单元，以降低通信成本和解析开销；另一方面需要探索 embedding、语义向量、隐藏状态特征或其他中间表示在 Agent 之间的直接传递机制，减少不必要的文本编解码过程，提高协作效率。在此基础上，还需将任务执行过程中形成的摘要、证据、策略、经验等内容沉淀为可标识、可检索、可复用的共享记忆单元，使系统具备跨任务的知识积累和协同增强能力。
-本课题区别于一般的工作流编排类题目，重点不在于简单调用大模型接口和外部工具，而在于研究多智能体协作中的“系统层机制”：包括 Agent 间统一通信协议设计、中间状态表示与交换方式、共享记忆组织模型、跨任务复用机制以及整体运行效率验证。选手需面向开源操作系统或通用 Linux 环境完成原型实现，通过可复现实验验证该机制相较传统纯文本协作方式在通信开销、任务时延和记忆复用方面的改进效果。        
-具体要求：
-- 系统需支持不少于 3 个 Agent 协同运行，至少覆盖任务规划、信息检索、总结生成、工具执行等角色中的 3 类，并能够完成一个包含多步骤处理过程的复杂任务；
-- 系统需设计并实现一套面向 Agent 间协作的结构化通信机制，通信内容至少包括动作类型、输入参数、返回结果和能力描述，并支持基本的握手、能力发现或协议映射机制，不得仅通过自然语言长文本直接透传全部协作信息；  
-- 系统需同时支持“纯文本协作模式”和“结构化协议协作模式”，并在相同任务条件下完成可复现实验对比；  
-- 系统需实现一种非文本中间状态传递机制，支持 embedding、语义向量、隐藏状态特征或其他中间表示在 Agent 间直接交换，并说明其生成方式、传递方式、接收方式及后续使用方式；
-- 系统需实现共享记忆模块，能够将任务执行过程中的中间结果、摘要、经验片段、证据链、结论或策略保存为统一的记忆单元，并为每条记忆记录至少包含记忆 ID、来源 Agent、创建时间、任务主题和摘要描述等基本元数据；  
-- 系统需支持按关键词、标签或语义相似度检索历史记忆，并允许不同 Agent 在后续任务中直接复用已有记忆；  
-- 系统需至少设计 2 组具有关联性的连续任务，验证结构化通信、非文本状态传递和共享记忆复用在减少重复计算、降低协作开销和提升任务效率方面的实际效果；
-- 系统需统计并展示 Agent 间消息次数、文本通信 token 或字符开销、非文本状态传递次数及数据规模、单任务总耗时、共享记忆命中率及整体性能提升情况； 
-- 系统架构中至少应包含多 Agent 运行时、协议解析与调度模块、状态交换模块、共享记忆存储与检索模块和评测模块，并能够稳定执行不少于 10 轮连续任务；  
-- 需提交完整源码、系统设计文档、部署文档、实验报告和演示视频，能够支持评审现，鼓励结合 IPC、共享内存、Socket、向量数据库、WASM/容器沙箱、eBPF 等系统技术提升实现质量。
-- 鼓励系统能够支持基于 CodeAct 模式的 Agent 执行机制，允许 LLM 生成 Python 可执行代码，并在轻量沙箱中安全运行，实现低延迟、可隔离的代码执行与结果回传能力。
-## 赛题要求：
-- 系统支持不少于3个Agent协同运行，覆盖规划、检索、执行、总结等角色；
-- 设计结构化通信协议替代自然语言交互；
-- 实现非文本中间状态传递机制（embedding/语义向量/隐藏状态）；
-- 实现共享记忆模块，支持记忆的存储、检索和复用；
-- 至少设计2组关联性连续任务进行验证；
-- 提供通信开销、任务时延、记忆复用等方面的性能对比数据。
-## 评分细则（明确评审角度、标准和分值范围）：
-- 通信效率（25分）：相比纯文本协作的token节省效果
-- 状态传递创新（20分）：非文本状态传递机制的设计新颖性
-- 记忆复用效果（20分）：跨任务记忆复用的准确性与效率
-- 系统完整性（20分）：多Agent协作的稳定性与功能覆盖
-- 实验验证（15分）：性能对比数据的说服力
-## 交付要求：
-最终交付的代码需在 openEuler 24.03-LTS-SP3 操作系统版本上能够正常编译、运行和测试。
-## 赛题联系人：
-- 陈老师  chengong15@huawei.com  
-- 李老师   liping136@huawei.com  
+> 社区赛题《一种面向多智能体协作的低开销通信、状态传递与共享记忆机制》参赛作品。
+>
+> 围绕赛题三大方向——**低开销通信、非文本状态传递、共享记忆复用**——设计并实现一套可运行的多 Agent 协作原型系统，在真实 LLM 后端上验证其相较纯文本协作在通信开销、任务时延和记忆复用方面的改进。
+
+赛题原文见 [`竞赛赛题.md`](竞赛赛题.md)；系统设计见 [`docs/系统设计文档.md`](docs/系统设计文档.md)；部署见 [`docs/部署文档.md`](docs/部署文档.md)。
+
+---
+
+## 赛题要求对齐
+
+| 要求 | 本系统实现 | 证据 |
+|---|---|---|
+| **M1** ≥3 Agent，覆盖规划/检索/执行/总结中 ≥3 类 | 4 角色 CodeAgent：Planner / Retriever / Executor / Summarizer | `src/synapse/runtime/team.py` |
+| **M2** 结构化通信协议（动作/参数/结果/能力 + 握手/能力发现） | `Message{action,params,result,capability}` + CNR 握手 + `Capability` 能力发现 | `src/synapse/protocol/` |
+| **M3** 纯文本模式 + 结构化协议模式，同任务可复现对比 | `text` / `synapse` 双模式，`ab` 命令同任务对照 | `src/synapse/modes/` |
+| **M4** 非文本中间状态传递（embedding/语义向量/隐藏状态） | 句向量预测残差编码 + CAS 句柄零拷贝传递 + 校验回退 | `src/synapse/stateplane/` |
+| **M5** 共享记忆单元（记忆 ID/来源 Agent/创建时间/任务主题/摘要） | `MemoryUnit` 五项元数据齐全 + 内容寻址去重 | `src/synapse/memory/store.py` |
+| **M6** 关键词/标签/语义相似度检索 + 跨任务复用 | 三路混合检索（keyword + tag + semantic cosine） | `src/synapse/memory/retrieval.py` |
+| **M7** ≥2 组关联性连续任务 | G1（主题深挖）+ G2（关联演进，复用 G1 记忆）+ 负例族 | `src/synapse/tasks.py` |
+| **M8** 通信开销/时延/记忆命中率统计 | 消息次数、文本 token/字节、非文本字节、时延、命中率 | `src/synapse/eval/harness.py` |
+| **M9** 五模块架构 + ≥10 轮连续任务 + 完整交付 | 运行时/协议/状态交换/记忆/评测五模块；smoke 跑 10 轮 | 见下方架构 |
+| **M10** openEuler 24.03-LTS 可编译运行 | Dockerfile + docker-compose 实测通过 | `Dockerfile` |
+| **M11** 鼓励 CodeAct 沙箱执行 | Executor 走 CodeAct 生成可执行 Python | `src/synapse/runtime/team.py` |
+
+---
+
+## 系统架构（五模块）
+
+| 模块 | 目录 | 职责 |
+|---|---|---|
+| ① 多 Agent 运行时 | `src/synapse/runtime/` | 基座 **smolagents**：4 个 CodeAgent（Planner/Retriever/Executor·CodeAct/Summarizer）+ 模型层抽象 |
+| ② 协议解析与调度 | `src/synapse/protocol/` | 结构化 `Message` + CNR 握手/能力发现 + 调度器 |
+| ③ 状态交换·数据平面 | `src/synapse/stateplane/` | CAS 内容寻址存储 + 句向量预测残差编码 + 校验和（非文本传递核心） |
+| ④ 共享记忆与检索 | `src/synapse/memory/` | 记忆单元 + 混合检索 + 预测基 + 跨任务巩固 |
+| ⑤ 评测与度量 | `src/synapse/eval/` | 双模式 A/B + 字节/时延/命中率统计 |
+
+**数据流**：发送方 Agent 产出中间结果 → 经 `protocol` 打包为结构化消息（非文本载荷写入 `stateplane` 的 CAS，消息只带句柄）→ 接收方 Agent 通过句柄取回非文本状态、用预测基重构完整表示 → `memory` 沉淀为可检索记忆单元供后续任务复用 → `eval` 全程统计通信开销。
+
+---
+
+## 快速开始
+
+```bash
+# 用 uv 安装依赖（推荐）
+uv sync                                  # 装基座 smolagents
+uv run synapse smoke                     # 离线自检（无需联网/API key），打印 PASS/FAIL
+uv run synapse ab --rounds 10            # 双模式 A/B（10 轮连续任务）
+uv run python tests/test_smoke.py        # 单元/smoke 测试（或 uv run --extra dev pytest）
+
+# 国内加速（不改全局）：uv sync --default-index https://pypi.tuna.tsinghua.edu.cn/simple
+```
+
+`smoke` 在离线 mock 下验证五件事并打印 PASS/FAIL：
+1. 双模式都产出结论
+2. synapse 模式省线缆字节
+3. 关联任务记忆命中
+4. 末轮非文本字节 ≤ 首轮（随经验下降）
+5. 负例族命中率 < 关联族（区分度）
+
+---
+
+## 双模式对比（赛题 M3）
+
+| | text 模式（基线） | synapse 模式 |
+|---|---|---|
+| 通信媒介 | 全量自然语言透传 | 结构化消息 + 残差句柄 |
+| 中间状态 | 内部态→文本→内部态 | 句向量预测残差直传 |
+| 共享记忆 | 无 | 记忆单元 + 混合检索复用 |
+| 正确性保证 | 文本无损 | 有损残差 + 校验回退 |
+
+---
+
+## 真实后端（Paratera 算力平台，API + 本地向量，无需 GPU）
+
+骨架默认全离线 mock。真实路径走 **Paratera 算力平台**（OpenAI 兼容；模型 `Qwen3-30B-A3B-Instruct-2507`）：
+
+```bash
+cp .env.example .env        # 填 PARATERA_API_KEY（仅放 .env，严禁提交；代码自动加载 .env）
+uv sync --extra api         # 装 openai 客户端（smolagents.OpenAIServerModel）
+
+uv run synapse probe                # ① 输出形态探针：鉴权 + CodeAct 可解析 + token 计数
+uv run synapse signal --rounds 10   # ② 真实 A/B + 字节方向判定，存档到 runs/
+uv run synapse m7 --g1 5 --g2 5     # ③ 跨组记忆复用（G2 复用 G1 记忆）
+uv run synapse coqa --convs 3       # ④ CoQA 真实数据集记忆复用
+```
+
+各命令把字节/token/命中率/时延轨迹写入 `runs/<命令>_<时间戳>/result.json`。
+
+---
+
+## openEuler 部署（M10）
+
+基座 smolagents 为纯 Python、轻依赖（无 torch/transformers/langchain），无平台特定依赖。**容器化已落地并实测**：
+
+```bash
+docker build -t synapse:latest . && docker run --rm synapse:latest          # 容器内离线自检 → SMOKE PASSED
+docker run --rm --env-file .env synapse:latest signal --rounds 10            # 真实实验（密钥仅运行期注入）
+```
+
+镜像基于 `openeuler/openeuler:24.03-lts`，非 root 运行，内置 healthcheck。详见 [`docs/部署文档.md`](docs/部署文档.md)。裸机同样可：openEuler 24.03 上 `uv sync && uv run synapse smoke`。
+
+---
+
+## 实验结果（赛题 M8）
+
+详细报告见 `docs/`。关键结果（真实 API）：
+
+| 场景 | 指标 | 结果 |
+|---|---|---|
+| 关联连续任务 A/B | wire 字节节省 | **41.4%**（关联族 vs 负例族因果对照干净） |
+| 跨组记忆复用 (M7) | G2 命中率 | **1.0**（每任务命中 G1 记忆） |
+| CoQA 真实数据集 | token 节省 / 命中率 / F1 | 8.2% / 0.92 / 0.733→0.748 |
+| HotpotQA 实体桥接检索 (N=200) | token 节省 | **71.8%**（ΔF1 −0.038，CI 含 0 = 质量统计不可区分） |
+
+---
+
+## 目录结构
+
+```
+synapse/
+├── 竞赛赛题.md                      # 赛题原文留档（权威需求基准）
+├── docs/系统设计文档.md              # 系统设计文档（可执行规格 + M1–M11 覆盖）
+├── docs/部署文档.md                  # openEuler 部署文档
+├── docs/实验报告-*.md               # 各场景实验报告
+├── src/synapse/                     # 五模块源码
+│   ├── runtime/  protocol/  stateplane/
+│   ├── memory/   modes/     eval/
+│   ├── qa/  (数据集对接)
+│   └── cli.py  config.py  tasks.py  prompts.py
+├── tests/test_smoke.py              # 离线 smoke/单元测试
+├── scripts/                         # 数据集获取与图表脚本
+├── configs/default.yaml             # 配置（无机密）
+├── Dockerfile / docker-compose.yml  # openEuler 容器化部署
+├── pyproject.toml                   # 依赖（uv 管理）
+└── .env.example                     # 环境变量模板（.env 已 gitignore）
+```
+
+---
+
+## 技术栈
+
+- **LLM 后端**：Paratera 算力平台（OpenAI 兼容 API，`Qwen3-30B-A3B-Instruct-2507`）
+- **Agent 框架**：[smolagents](https://github.com/huggingface/smolagents)（CodeAct 执行）
+- **非文本状态**：句向量嵌入（本地 `GLM-Embedding-3` 兼容）+ 预测残差编码
+- **包管理**：[uv](https://docs.astral.sh/uv/)
+- **容器**：Docker（openEuler 24.03-LTS 基础镜像）
+
+## 许可证
+
+Apache-2.0

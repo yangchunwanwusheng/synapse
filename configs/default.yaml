@@ -1,0 +1,27 @@
+# SYNAPSE 默认配置（与 src/synapse/config.py::Config 字段一致；ab 命令可 --config 覆盖）
+# 机密只放 .env，严禁写入本文件。
+
+# 表示 / 残差
+embed_dim: 64
+quant_grid: 64
+sparsity_eps: 0
+
+# 检索 / 记忆
+retrieval_k: 5
+hit_threshold: 0.15
+w_keyword: 0.3
+w_tag: 0.2
+w_semantic: 0.5
+
+# 运行
+rounds: 10
+seeds: [0, 1, 2]
+
+# 后端（默认全离线 mock；真实路径 = Paratera 算力平台，见 README）
+llm_backend: mock          # mock | paratera
+embedder: hash             # hash | sentence | api
+model: Qwen3-30B-A3B-Instruct-2507
+api_base: https://llmapi.paratera.com/v1
+api_key_env: PARATERA_API_KEY
+temperature: 0.0           # 复现性：真实 LLM 固定 0
+embed_model: GLM-Embedding-3
