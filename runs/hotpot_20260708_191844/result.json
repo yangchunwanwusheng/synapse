@@ -1,0 +1,104 @@
+{
+  "config": {
+    "embed_dim": 64,
+    "quant_grid": 64,
+    "sparsity_eps": 0,
+    "verify_threshold": 0.97,
+    "n_facts": 40,
+    "retrieval_k": 5,
+    "hit_threshold": 0.15,
+    "w_keyword": 0.3,
+    "w_tag": 0.2,
+    "w_semantic": 0.5,
+    "rounds": 10,
+    "seeds": [
+      0,
+      1,
+      2
+    ],
+    "abl_no_tom": false,
+    "abl_no_consolidation": false,
+    "abl_no_residual": false,
+    "abl_no_checksum": false,
+    "qa_sentences_k": 4,
+    "qa_history_k": 2,
+    "qa_para_k": 3,
+    "qa_retrieval": "single",
+    "llm_backend": "paratera",
+    "embedder": "api",
+    "model": "Qwen3-235B-A22B-Instruct-2507",
+    "api_base": "https://llmapi.paratera.com/v1",
+    "api_key_env": "PARATERA_API_KEY",
+    "temperature": 0.0,
+    "embed_model": "GLM-Embedding-3"
+  },
+  "result": {
+    "n_items": 3,
+    "para_k": 3,
+    "text": {
+      "mode": "text",
+      "messages": 3,
+      "text_bytes": 16776,
+      "text_tokens": 2713,
+      "header_bytes": 444,
+      "nontext_transfers": 0,
+      "nontext_bytes": 0,
+      "fallbacks": 0,
+      "memory_queries": 0,
+      "memory_hits": 0,
+      "llm_tokens": 0,
+      "llm_input_tokens": 4343,
+      "llm_output_tokens": 7,
+      "latency_s": 17.639301199997135,
+      "quality": 0.6667,
+      "wire_bytes": 17220,
+      "hit_rate": 0.0,
+      "llm_total_tokens": 4350
+    },
+    "synapse": {
+      "mode": "synapse",
+      "messages": 3,
+      "text_bytes": 0,
+      "text_tokens": 0,
+      "header_bytes": 720,
+      "nontext_transfers": 3,
+      "nontext_bytes": 240,
+      "fallbacks": 0,
+      "memory_queries": 3,
+      "memory_hits": 3,
+      "llm_tokens": 0,
+      "llm_input_tokens": 1247,
+      "llm_output_tokens": 17,
+      "latency_s": 18.92890239999906,
+      "quality": 0.6667,
+      "wire_bytes": 960,
+      "hit_rate": 1.0,
+      "llm_total_tokens": 1264
+    },
+    "text_f1_per_item": [
+      1.0,
+      0.0,
+      1.0
+    ],
+    "synapse_f1_per_item": [
+      1.0,
+      0.0,
+      1.0
+    ],
+    "gold_recall": 0.667,
+    "levels": [
+      "hard",
+      "hard",
+      "hard"
+    ],
+    "improvement": {
+      "llm_token_saved_pct": 70.94,
+      "llm_input_saved_pct": 71.29,
+      "wire_bytes_saved_pct": 94.43,
+      "token_saved_pct": 100.0,
+      "latency_saved_pct": -7.31,
+      "synapse_hit_rate": 1.0,
+      "synapse_fallbacks": 0
+    }
+  }
+}

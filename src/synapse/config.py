@@ -34,6 +34,7 @@ class Config:
     abl_no_consolidation: bool = False  # 关跨任务巩固 → 记忆不固化
     abl_no_residual: bool = False  # 发全量量化向量（无预测/无稀疏）→ 字节应更大
     abl_no_checksum: bool = False  # 关语义校验/回退 → 失配时端到端正确性应降
+    abl_no_memory: bool = False  # B3-no-mem：每任务清空跨任务记忆 → 证残差率下降因果源于记忆（P0-1 假设3 归因 ablation）
 
     # ---- 真实数据集 QA ----
     qa_sentences_k: int = 4  # [CoQA] synapse 每轮检索的故事句子数（非文本选择）
@@ -44,7 +45,7 @@ class Config:
     # ---- 后端（骨架默认全离线 mock；真实路径 = Paratera 算力平台，OpenAI 兼容）----
     llm_backend: str = "mock"  # "mock" | "paratera"
     embedder: str = "hash"  # "hash" | "sentence" | "api"
-    model: str = "Qwen3-30B-A3B-Instruct-2507"  # 廉价 MoE(3B激活)+Instruct(非thinking, 利 CodeAct 解析/L5)
+    model: str = "Qwen3-235B-A22B-Instruct-2507"  # MoE(22B激活)+Instruct(非thinking)；2026-07-08 从 30B-A3B 切换（账户权限失效）
     api_base: str = "https://llmapi.paratera.com/v1"
     api_key_env: str = "PARATERA_API_KEY"
     temperature: float = 0.0  # 复现性：真实 LLM 固定 0（实验协议 §LLM 条件块 / L5）

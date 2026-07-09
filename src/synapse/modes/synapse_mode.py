@@ -42,6 +42,12 @@ class SynapseSession:
 
     def run_task(self, task) -> dict:
         cfg = self.cfg
+        # B3-no-mem 强 ablation：每任务前清空跨任务记忆（证假设3归因——残差率下降是否因果源于记忆）
+        if getattr(cfg, "abl_no_memory", False):
+            self.store._units.clear()
+            if hasattr(self.store, "_prototypes"):
+                self.store._prototypes.clear()
+            self.cas = CAS()  # 重置内容寻址存储
         team = self.team
         team.bind_topic(task.topic)
         m = Metrics(mode="synapse")

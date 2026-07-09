@@ -8,6 +8,7 @@ from __future__ import annotations
 
 import json
 import os
+import random
 import re
 from dataclasses import dataclass
 
@@ -72,8 +73,9 @@ class HotpotItem:
 
 
 def load_hotpot(
-    path: str = os.path.join("data", "hotpot_sample.json"), n: int | None = None
+    path: str = os.path.join("data", "hotpot_sample.json"), n: int | None = None, seed: int | None = None
 ) -> list[HotpotItem]:
+    """加载 HotpotQA/MuSiQue distractor 数据。seed 非 None 时按 seed shuffle 题序（P0-4 可复现性）。"""
     if not os.path.exists(path):
         raise SystemExit(f"未找到 {path}，请先 `uv run python scripts/fetch_hotpot.py`")
     raw = json.load(open(path, encoding="utf-8"))
@@ -89,4 +91,6 @@ def load_hotpot(
         )
         for it in raw
     ]
+    if seed is not None:
+        random.Random(seed).shuffle(items)
     return items[:n] if n else items
