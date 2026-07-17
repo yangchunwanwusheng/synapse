@@ -60,9 +60,9 @@ def run_coqa(cfg, n_conv: int = 2, path: str = "data/coqa_sample.json") -> dict:
     }
 
 
-def run_hotpot(cfg, n_items: int = 10, path: str = "data/hotpot_sample.json") -> dict:
+def run_hotpot(cfg, n_items: int = 10, path: str = "data/hotpot_sample.json", seed: int | None = None) -> dict:
     """HotpotQA distractor A/B：基线塞全 10 段 vs synapse 只检索相关段（丢干扰）。"""
-    items = load_hotpot(path, n_items)
+    items = load_hotpot(path, n_items, seed=seed)
     rt = run_text_hotpot(items, cfg)
     rs = run_synapse_hotpot(items, cfg)
     tm, sm = rt["metrics"], rs["metrics"]

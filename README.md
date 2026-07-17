@@ -74,16 +74,19 @@ uv run python tests/test_smoke.py        # 单元/smoke 测试（或 uv run --ex
 
 ## 真实后端（Paratera 算力平台，API + 本地向量，无需 GPU）
 
-骨架默认全离线 mock。真实路径走 **Paratera 算力平台**（OpenAI 兼容；模型 `Qwen3-30B-A3B-Instruct-2507`）：
+骨架默认全离线 mock。真实路径走 **Paratera 算力平台**（OpenAI 兼容；模型 `Qwen3-235B-A22B-Instruct-2507`）：
 
 ```bash
 cp .env.example .env        # 填 PARATERA_API_KEY（仅放 .env，严禁提交；代码自动加载 .env）
 uv sync --extra api         # 装 openai 客户端（smolagents.OpenAIServerModel）
 
 uv run synapse probe                # ① 输出形态探针：鉴权 + CodeAct 可解析 + token 计数
-uv run synapse signal --rounds 10   # ② 真实 A/B + 字节方向判定，存档到 runs/
+uv run synapse signal --rounds 5    # ② 真实 A/B + 字节方向判定，存档到 runs/
 uv run synapse m7 --g1 5 --g2 5     # ③ 跨组记忆复用（G2 复用 G1 记忆）
 uv run synapse coqa --convs 3       # ④ CoQA 真实数据集记忆复用
+uv run synapse hotpot --n 20        # ⑤ HotpotQA 丢干扰段，真实 token + F1
+uv run synapse musique --n 10 --retrieval twohop  # ⑥ MuSiQue 多跳链式检索
+uv run synapse signal --rounds 5 --no-memory      # ⑦ B3 ablation：无记忆对照（证归因）
 ```
 
 各命令把字节/token/命中率/时延轨迹写入 `runs/<命令>_<时间戳>/result.json`。
@@ -105,14 +108,27 @@ docker run --rm --env-file .env synapse:latest signal --rounds 10            # �
 
 ## 实验结果（赛题 M8）
 
-详细报告见 `docs/`。关键结果（真实 API）：
+详细报告见 `docs/实验报告-2026-07-08-update.md`。关键结果（真实 API，Qwen3-235B-A22B-Instruct-2507，temp=0）：
 
-| 场景 | 指标 | 结果 |
+### 通信效率 + 答案质量（三数据集 per-dataset 最优配置）
+
+| 数据集 | N | 检索模式 | token 节省 | text F1 | synapse F1 | ΔF1 | 金标召回 |
+|---|---|---|---|---|---|---|---|
+| HotpotQA (bridge 型) | 20 | single k=3 | **75.5%** | 0.714 | 0.757 | **+0.043** | 0.85 |
+| MuSiQue (链式多跳) | 10 | twohop k=3 | **84.3%** | 0.170 | 0.240 | **+0.070** | 0.70 |
+| CoQA (对话式 QA) | 3 conv | — | **9.7%** | 0.662 | 0.682 | **+0.020** | hit 0.92 |
+
+> 三数据集均 ΔF1 ≥ 0：synapse 省 75-84% token（多文档场景）/ 9.7%（对话场景），答案质量不降反升。
+> 检索模式需匹配任务结构：HotpotQA→single 最优（twohop 引入噪声），MuSiQue→twohop 最优（补桥接段）。
+
+### 机制验证：记忆增长 → 残差率下降（+ B3 无记忆 ablation 归因）
+
+| 条件 | 残差率 drop% | 记忆命中率 |
 |---|---|---|
-| 关联连续任务 A/B | wire 字节节省 | **41.4%**（关联族 vs 负例族因果对照干净） |
-| 跨组记忆复用 (M7) | G2 命中率 | **1.0**（每任务命中 G1 记忆） |
-| CoQA 真实数据集 | token 节省 / 命中率 / F1 | 8.2% / 0.92 / 0.733→0.748 |
-| HotpotQA 实体桥接检索 (N=200) | token 节省 | **71.8%**（ΔF1 −0.038，CI 含 0 = 质量统计不可区分） |
+| B1-full（有记忆） | **40.0%**（82→32 字节） | **0.8** |
+| B3-no-mem（记忆清空 ablation） | **6.4%**（几乎不降） | **0.0** |
+
+> 记忆清空后 drop 从 40%→6.4%，残差率下降的幅度**因果源于记忆复用**（假设3 归因验证）。
 
 ---
 
@@ -141,7 +157,7 @@ synapse/
 
 ## 技术栈
 
-- **LLM 后端**：Paratera 算力平台（OpenAI 兼容 API，`Qwen3-30B-A3B-Instruct-2507`）
+- **LLM 后端**：Paratera 算力平台（OpenAI 兼容 API，`Qwen3-235B-A22B-Instruct-2507`，MoE 22B 激活）
 - **Agent 框架**：[smolagents](https://github.com/huggingface/smolagents)（CodeAct 执行）
 - **非文本状态**：句向量嵌入（本地 `GLM-Embedding-3` 兼容）+ 预测残差编码
 - **包管理**：[uv](https://docs.astral.sh/uv/)

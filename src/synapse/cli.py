@@ -151,6 +151,8 @@ def cmd_signal(args) -> int:
     cfg = _real_cfg(args)
     if cfg is None:
         return 2
+    if getattr(args, "no_memory", False):
+        cfg = replace(cfg, abl_no_memory=True)
     print(
         f"== SIGNAL: backend={cfg.llm_backend} model={cfg.model} embedder={cfg.embedder} "
         f"rounds={args.rounds} topic={args.topic!r} temp={cfg.temperature} =="
@@ -328,20 +330,41 @@ def cmd_hotpot(args) -> int:
     cfg = _real_cfg(args)
     if cfg is None:
         return 2
-    cfg = replace(cfg, embedder=args.embedder, qa_para_k=args.k)
+    cfg = replace(cfg, embedder=args.embedder, qa_para_k=args.k, qa_retrieval=getattr(args, "retrieval", "single"))
     from .qa.harness import run_hotpot
 
     print(
         f"== HotpotQA: model={cfg.model} embedder={cfg.embedder} para_k={cfg.qa_para_k} "
-        f"items={args.n} (每题 10 段=2 金标+8 干扰) =="
+        f"retrieval={cfg.qa_retrieval} items={args.n} (每题 10 段=2 金标+8 干扰) =="
     )
-    res = run_hotpot(cfg, n_items=args.n)
+    res = run_hotpot(cfg, n_items=args.n, seed=getattr(args, "seed", None))
+    return _print_hotpot_result(cfg, res, "hotpot")
 
-    out_dir = os.path.join("runs", f"hotpot_{datetime.now().strftime('%Y%m%d_%H%M%S')}")
+
+def cmd_musique(args) -> int:
+    """真实数据集(MuSiQue)多文档 QA：与 HotpotQA 同结构但每题 20 段（干扰更密）。
+    复用 run_hotpot 逻辑，只切换数据路径。P0-2 第二数据集交叉验证。
+    """
+    cfg = _real_cfg(args)
+    if cfg is None:
+        return 2
+    cfg = replace(cfg, embedder=args.embedder, qa_para_k=args.k, qa_retrieval=getattr(args, "retrieval", "single"))
+    from .qa.harness import run_hotpot
+
+    print(
+        f"== MuSiQue: model={cfg.model} embedder={cfg.embedder} para_k={cfg.qa_para_k} "
+        f"retrieval={cfg.qa_retrieval} items={args.n} (每题 20 段) =="
+    )
+    res = run_hotpot(cfg, n_items=args.n, path="data/musique_sample.json", seed=getattr(args, "seed", None))
+    return _print_hotpot_result(cfg, res, "musique")
+
+
+def _print_hotpot_result(cfg, res, tag: str) -> int:
+    """hotpot/musique 共用结果输出 + 落档。"""
+    out_dir = os.path.join("runs", f"{tag}_{datetime.now().strftime('%Y%m%d_%H%M%S')}")
     os.makedirs(out_dir, exist_ok=True)
     with open(os.path.join(out_dir, "result.json"), "w", encoding="utf-8") as f:
         json.dump({"config": cfg.to_dict(), "result": res}, f, ensure_ascii=False, indent=2)
-
     imp, tt, st = res["improvement"], res["text"], res["synapse"]
     print(
         json.dumps(
@@ -368,7 +391,7 @@ def cmd_hotpot(args) -> int:
         )
     )
     token_ok = imp["llm_token_saved_pct"] > 0
-    f1_ok = st["quality"] >= tt["quality"] - 0.03  # 质量不降（省 token 非靠丢答案段）
+    f1_ok = st["quality"] >= tt["quality"] - 0.03
     print(
         f"  [{'PASS' if token_ok else 'FAIL'}] 真实 LLM token 节省 "
         f"(saved%={imp['llm_token_saved_pct']}, 输入省%={imp['llm_input_saved_pct']})"
@@ -449,6 +472,7 @@ def main(argv=None) -> int:
     sg.add_argument("--config", default=None)
     sg.add_argument("--rounds", type=int, default=5)
     sg.add_argument("--topic", default="the Transformer attention mechanism in deep learning")
+    sg.add_argument("--no-memory", action="store_true", help="B3-no-mem ablation：每任务清空记忆（证假设3归因）")
     sg.set_defaults(func=cmd_signal)
     m7 = sub.add_parser("m7", help="M7：≥2 组关联连续任务，验证 G2 跨组复用 G1 记忆")
     m7.add_argument("--config", default=None)
@@ -467,7 +491,19 @@ def main(argv=None) -> int:
     hp.add_argument("--n", type=int, default=10, help="题数")
     hp.add_argument("--embedder", default="api", choices=["api", "hash", "sentence"])
     hp.add_argument("--k", type=int, default=3, help="synapse 每题检索段数（10 段取 k）")
+    hp.add_argument("--seed", type=int, default=None, help="题序 shuffle seed（P0-4 可复现性；None=原序）")
+    hp.add_argument("--retrieval", default="single", choices=["single", "twohop", "bridge"],
+                    help="检索模式：single=单跳 | twohop=嵌入查询扩展 | bridge=词法实体桥接")
     hp.set_defaults(func=cmd_hotpot)
+    mq = sub.add_parser("musique", help="真实数据集(MuSiQue)：20 段干扰更密，第二数据集交叉验证")
+    mq.add_argument("--config", default=None)
+    mq.add_argument("--n", type=int, default=10, help="题数")
+    mq.add_argument("--embedder", default="api", choices=["api", "hash", "sentence"])
+    mq.add_argument("--k", type=int, default=3, help="synapse 每题检索段数（20 段取 k）")
+    mq.add_argument("--seed", type=int, default=None, help="题序 shuffle seed（P0-4 可复现性）")
+    mq.add_argument("--retrieval", default="single", choices=["single", "twohop", "bridge"],
+                    help="检索模式：single=单跳 | twohop=嵌入查询扩展 | bridge=词法实体桥接")
+    mq.set_defaults(func=cmd_musique)
     hs = sub.add_parser("hotpot-stats", help="HotpotQA 统计稳健化：N×R + 配对置信区间")
     hs.add_argument("--config", default=None)
     hs.add_argument("--n", type=int, default=50, help="题数")
