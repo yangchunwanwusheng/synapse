@@ -17,12 +17,17 @@ def plan_prompt(task) -> str:
     )
 
 
-def retrieve_prompt(task) -> str:
+def retrieve_prompt(task, memory_snapshot: str | None = None) -> str:
+    snap = (
+        f"\nRelevant memory snapshot (frozen, for reference only; do NOT call any tool):\n{memory_snapshot}\n"
+        if memory_snapshot
+        else ""
+    )
     return (
         "You are a domain expert with NO external tools and NO web access. Using ONLY your own "
         f"knowledge, write 6-8 concise factual evidence points about the topic '{task.topic}' "
         f"relevant to: {task.query}. Do NOT call web_search or any tool other than final_answer. "
-        "Immediately call final_answer(text) where text is the evidence points joined into one string."
+        f"Immediately call final_answer(text) where text is the evidence points joined into one string.{snap}"
     )
 
 
@@ -35,11 +40,16 @@ def execute_prompt() -> str:
     )
 
 
-def summarize_prompt(task) -> str:
+def summarize_prompt(task, memory_snapshot: str | None = None) -> str:
+    snap = (
+        f"\nRelevant memory snapshot (frozen, for reference only):\n{memory_snapshot}\n"
+        if memory_snapshot
+        else ""
+    )
     return (
         f"Write a 2-3 sentence factual conclusion about '{task.topic}', grounded in the provided "
         "`evidence` string and the computed `metric` (an integer word count). "
         "Then call final_answer(conclusion) as your ONLY code. Do NOT add any assertion, length check, "
         "word-count check, or validation on the conclusion or metric (such a check fails and wastes all "
-        "your steps). Use no tool other than final_answer."
+        f"your steps). Use no tool other than final_answer.{snap}"
     )

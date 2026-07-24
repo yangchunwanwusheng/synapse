@@ -32,10 +32,13 @@ def _load_dotenv(path: str = ".env") -> None:
 
 
 def _real_cfg(args):
-    """构造真实后端配置：--config 优先；mock 默认覆盖为 paratera。无密钥返回 None。"""
+    """构造真实后端配置：--config 优先；mock 默认覆盖为 paratera。无密钥返回 None。
+
+    若 YAML 已指定具体 backend（如 vectorengine），尊重配置不覆盖——支持多平台切换。
+    """
     _load_dotenv()
     cfg = load_config(getattr(args, "config", None))
-    if cfg.llm_backend == "mock":
+    if cfg.llm_backend == "mock":  # 默认 mock → 回退到 paratera（向后兼容）
         cfg = replace(cfg, llm_backend="paratera")
     if not cfg.api_key():
         print(f"[ERR] {cfg.api_key_env} 未设置——请先在项目根 .env 填入密钥（严禁硬编码/提交）")

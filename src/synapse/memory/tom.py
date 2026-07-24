@@ -20,18 +20,20 @@ class ToMPredictor:
         self, receiver_id: str, query: str, target: list[float] | None = None, k: int | None = None
     ) -> list[float] | None:
         """返回 B̂_j（预测的接收方可复现向量）；无相关记忆时返回 None（退化为发全量）。"""
-        emb, _ = self.best_base(self._retriever.search(query, k=k), target)
+        emb, _, _ = self.best_base(self._retriever.search(query, k=k), target)
         return emb
 
-    def best_base(self, results, target: list[float] | None) -> tuple[list[float] | None, str | None]:
+    def best_base(
+        self, results, target: list[float] | None
+    ) -> tuple[list[float] | None, str | None, float]:
         """从接收方记忆候选中选与 target(Y) 最接近者作预测基（发送方残差优化）。
 
         base 经其 mem_id 句柄告知接收方——双方共享记忆，接收方取同一单元复现该基。
-        返回 (embedding, mem_id)；无候选返回 (None, None)。命中越准 → 基越接近 Y
-        → 残差越稀疏 → 非文本字节越少。
+        返回 (embedding, mem_id, sim)；无候选返回 (None, None, 0.0)。命中越准 → 基越接近 Y
+        → 残差越稀疏 → 非文本字节越少。sim 同时供 §1.2 三档协议发送方预判选档。
         """
         if not results or target is None:
-            return None, None
+            return None, None, 0.0
         best, best_sim = None, -2.0
         for unit, _score in results:
             if not unit.embedding:
@@ -40,5 +42,5 @@ class ToMPredictor:
             if sim > best_sim:
                 best_sim, best = sim, unit
         if best is None:
-            return None, None
-        return best.embedding, best.mem_id
+            return None, None, 0.0
+        return best.embedding, best.mem_id, best_sim

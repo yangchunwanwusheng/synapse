@@ -55,6 +55,11 @@ def _agg(traj):
         agg.llm_tokens += m.llm_tokens
         agg.latency_s += m.latency_s
         agg.quality += m.quality
+        agg.tier_residual += m.tier_residual
+        agg.tier_embedding += m.tier_embedding
+        agg.tier_text += m.tier_text
+        agg.frozen_snapshot_injections += m.frozen_snapshot_injections
+        agg.result_spills += m.result_spills
     if traj:
         agg.quality /= len(traj)
     return agg

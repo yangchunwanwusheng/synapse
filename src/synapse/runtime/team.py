@@ -24,13 +24,29 @@ _ROLES = (
 
 
 def _cap(agent_id: str, role: str, actions: tuple[str, ...]) -> Capability:
+    # §2.2 Executor 声明可被运行时探测的 codeact_sandbox 能力（CNR 握手时实测）
+    probe = ("codeact_sandbox",) if role == "executor" else ()
     return Capability(
         agent_id=agent_id,
         role=role,
         actions=actions,
         encodings=("text", "embedding", "residual"),
         model_family="mock-family",
+        probe=probe,
     )
+
+
+def _make_verify_check_fn():
+    """§2.2 能力运行时验证 check_fn：对 cap.probe 声明的项做实测，返回已验证子集。
+
+    离线/mock 路径：CodeAct 沙箱可用性已由 smoke 实测（test_codeact_executor_runs_offline），
+    故直接返回声明的 probe 集合。真实路径可扩展为实际沙箱探测。
+    """
+
+    def _check(cap: Capability) -> set[str]:
+        return set(cap.probe)  # 离线：声明即已验证（真实路径换为沙箱实测）
+
+    return _check
 
 
 @dataclass

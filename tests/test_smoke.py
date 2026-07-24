@@ -144,6 +144,43 @@ def test_negative_control_low_reuse():
     assert negative["improvement"]["synapse_hit_rate"] < linked["improvement"]["synapse_hit_rate"]
 
 
+def test_three_tier_protocol_stats():
+    # §1.2 三档混合协议：一轮 synapse 后 residual+embedding+text 档位总计数 > 0
+    session = SynapseSession(Config())
+    res = session.run_task(T.g1_family(1)[0])
+    m = res["metrics"]
+    total_tiers = m.tier_residual + m.tier_embedding + m.tier_text
+    assert total_tiers > 0, "三档协议档位统计应 > 0"
+    # 冷启动首轮应走 residual（零基）档，不应是 text 档（保住收缩叙事）
+    assert m.tier_text == 0, "无校验失败时首轮不应触发 text 档"
+
+
+def test_memory_supersede_chain():
+    # §3.1 A-MEM 风格记忆演化：同 topic 高相似内容写入 → 旧单元 superseded_by 非空、新单元 links 继承
+    store = MemoryStore(HashEmbedder(Config().embed_dim))
+    emb = HashEmbedder(Config().embed_dim)
+    # 先写一条
+    u1 = store.write(
+        source_agent="r", task_topic="alpha", summary="s", content="alpha beta gamma evidence",
+        kind="evidence", supersede_threshold=0.5,
+    )
+    assert u1.superseded_by is None
+    # 写入高度相似（同 topic+kind，cosine 高）→ 旧 u1 被标记取代
+    u2 = store.write(
+        source_agent="r", task_topic="alpha", summary="s", content="alpha beta gamma evidence updated",
+        kind="evidence", supersede_threshold=0.5,
+    )
+    assert u2.links == (u1.mem_id,), "新单元 links 应继承被取代的旧单元"
+    assert store.get(u1.mem_id).superseded_by == u2.mem_id, "旧单元应被标记为已取代"
+    # 检索默认不返回已取代单元
+    from synapse.memory.retrieval import HybridRetriever
+    retr = HybridRetriever(store, emb, Config())
+    hits = retr.search("alpha", k=5)
+    hit_ids = {u.mem_id for u, _ in hits}
+    assert u1.mem_id not in hit_ids, "已取代单元不应出现在检索结果"
+    assert u2.mem_id in hit_ids, "活跃单元应可被检索"
+
+
 if __name__ == "__main__":
     fns = [v for k, v in sorted(globals().items()) if k.startswith("test_") and callable(v)]
     for fn in fns:

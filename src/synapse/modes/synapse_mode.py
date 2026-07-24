@@ -11,8 +11,8 @@ from __future__ import annotations
 import time
 
 from ..config import Config
-from ..runtime.team import build_team
-from ..protocol.messages import Message, ActionType
+from ..runtime.team import build_team, _make_verify_check_fn
+from ..protocol.messages import Message, ActionType, spill_result
 from ..protocol.handshake import CNR
 from ..protocol.scheduler import Scheduler
 from ..stateplane.embedding import make_embedder
@@ -51,7 +51,8 @@ class SynapseSession:
         team = self.team
         team.bind_topic(task.topic)
         m = Metrics(mode="synapse")
-        sched = Scheduler(team.agents(), cnr=CNR(), metrics=m)
+        # §2.2 CNR 握手带运行时能力探测（check_fn 门控）：Executor 声明 codeact_sandbox 时实测
+        sched = Scheduler(team.agents(), cnr=CNR(check_fn=_make_verify_check_fn()), metrics=m)
         planner = sched.agent("planner")
         retr = sched.agent("retriever")
         execu = sched.agent("executor")
@@ -77,15 +78,34 @@ class SynapseSession:
         hit = bool(results) and results[0][1] > cfg.hit_threshold
         m.record_query(hit)
 
-        evidence = retr.run(retrieve_prompt(task), reset=True)
+        # §4.1 frozen-snapshot 记忆注入：任务前冻结当前相关记忆的 summary 快照注入 prompt，
+        # session 中途写入落盘但不改已注入快照（保前缀缓存）；真实 API 路径的零成本 token 节省
+        memory_snapshot = " | ".join(f"[{u.kind}]{u.summary}" for u, _ in results[:3]) or None
+        if memory_snapshot:
+            m.frozen_snapshot_injections += 1
+
+        evidence = retr.run(retrieve_prompt(task, memory_snapshot), reset=True)
         Y = self.embedder.encode(evidence)
         if cfg.abl_no_tom:  # 消融：无 ToM 预测基 → 残差对零基编码、不因经验变准
-            b_hat, base_id = None, None
+            b_hat, base_id, base_sim = None, None, 0.0
         else:
-            b_hat, base_id = self.tom.best_base(results, Y)  # 发送方择最优预测基 B̂_j（句柄=base_id）
+            b_hat, base_id, base_sim = self.tom.best_base(results, Y)  # 发送方择最优预测基 B̂_j + sim
 
         # 证据正文存入共享 CAS（"记忆即媒介"）：接收方按句柄取，不在 agent 间消息里透传正文
         text_handle = self.cas.put(evidence.encode("utf-8"))
+
+        # §1.2 三档混合协议（对标 HyLaT）：tier 标注发送方预测基强度，供协议演化分析。
+        #   residual(强基) : sim ≥ 阈值 → 残差稀疏（核心收缩机制成立的稳态）
+        #   embedding(弱基) : 0 < sim < 阈值 → 残差仍可编码但较大（记忆积累中）
+        #   residual(零基) : 无记忆/首轮冷启动 → 对零基编码出大残差（收缩序列的起点，必为正）
+        #   text(回退)     : 仅校验失败时切档 → 全量文本（协议正常一档，非异常降级）
+        # 注：首轮冷启动不走 text 档而走零基 residual 档，以保住"残差随经验单调下降"的核心叙事
+        # （若首轮 nontext=0、末轮>0，收缩断言会反相；零基残差是收缩序列的合法正起点）。
+        has_base = b_hat is not None and base_sim > 0.0
+        tier = (
+            "residual" if not has_base or base_sim >= cfg.verify_threshold
+            else "embedding"
+        )
 
         # 非文本状态传递：预测残差编码（只传必要分量）；线缆只走 残差句柄 + 内容句柄 + 校验
         pkt = self.codec.encode(Y, b_hat, base_id)
@@ -103,7 +123,7 @@ class SynapseSession:
                 handles=(handle, text_handle),
                 payload_kind="residual",
                 checksum=pkt.checksum,
-                meta={"nontext_bytes": nontext_bytes, "nnz": nnz},
+                meta={"nontext_bytes": nontext_bytes, "nnz": nnz, "tier": tier},
             )
         )
 
@@ -114,7 +134,7 @@ class SynapseSession:
         # 解码重构 Ŷ + 语义校验：cos(Ŷ, Y_true) ≥ 阈值
         yq_hat = self.codec.decode(pkt, b_hat)
         ok = True if cfg.abl_no_checksum else self.codec.verify(yq_hat, Y_true)
-        if not ok:  # 校验不符（预测基失配/裁剪失真）→ 回退取全量文本
+        if not ok:  # 校验不符（预测基失配/裁剪失真）→ 回退取全量文本（切到协议 text 档）
             sched.send(
                 Message(
                     sched.next_msg_id(),
@@ -132,24 +152,28 @@ class SynapseSession:
                     ActionType.TELL.value,
                     payload_kind="text",
                     text=evidence,
-                    meta={"fallback": True},
+                    meta={"fallback": True, "tier": "text"},
                 )
             )
 
-        # 执行（真·CodeAct，结构化结果）
+        # 执行（真·CodeAct，结构化结果）；§2.3 result 超预算则 spill 到 CAS 句柄 + 短摘要
         exec_res = execu.run(execute_prompt(), reset=True, additional_args={"evidence": evidence})
+        exec_result, spill_handles = spill_result({"metric": exec_res}, self.cas)
         sched.send(
             Message(
                 sched.next_msg_id(),
                 execu.agent_id,
                 summ.agent_id,
                 ActionType.EXECUTE.value,
-                result={"metric": exec_res},
+                result=exec_result,
+                handles=spill_handles,
+                meta={"spilled": bool(spill_handles)},
             )
         )
-        # 使用环（§13.2）：总结器用接收方已取回的证据正文 + 计算结果出结论
+        # 使用环（§13.2）：总结器用接收方已取回的证据正文 + 计算结果出结论（复用同一冻结快照）
         conclusion = summ.run(
-            summarize_prompt(task), reset=True, additional_args={"evidence": recv_text, "metric": exec_res}
+            summarize_prompt(task, memory_snapshot), reset=True,
+            additional_args={"evidence": recv_text, "metric": exec_res},
         )
 
         # 写回高价值记忆（供后续任务复用 → 非文本字节更省）

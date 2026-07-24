@@ -35,6 +35,7 @@ class Capability:
     actions: tuple[str, ...]
     encodings: tuple[str, ...]      # text|embedding|residual|hidden
     model_family: str               # 同族判定（隐状态零拷贝前提）
+    probe: tuple[str, ...] = ()     # §2.2 声明可被运行时探测的能力项（如 codeact_sandbox），check_fn 实测后生效
 
 
 @dataclass
@@ -72,3 +73,18 @@ class Message:
     def to_wire(self) -> str:
         d = asdict(self)
         return json.dumps(d, ensure_ascii=False, separators=(",", ":"))
+
+
+def spill_result(result: dict, cas, budget: int = 512) -> tuple[dict, tuple[str, ...]]:
+    """§2.3 result 预算与 spill 降级（借鉴 hermes delegate 动态摘要预算 + spill-to-file）。
+
+    若 result 序列化字节超 budget → 把完整 result 写入 CAS 返回句柄，result 字段替换为
+    `{"spilled": True, "handle": h, "summary": <前 200 字符>}`；否则原样返回。
+    返回 (新result, 新增handles)；让结构化协议具备大小自适应，与 §1.2 三档协议共用降级逻辑。
+    """
+    raw = json.dumps(result, ensure_ascii=False, separators=(",", ":")).encode("utf-8")
+    if len(raw) <= budget:
+        return result, ()
+    handle = cas.put(raw)
+    summary = json.dumps(result, ensure_ascii=False)[:200]
+    return {"spilled": True, "handle": handle, "summary": summary}, (handle,)

@@ -72,21 +72,21 @@ uv run python tests/test_smoke.py        # 单元/smoke 测试（或 uv run --ex
 
 ---
 
-## 真实后端（Paratera 算力平台，API + 本地向量，无需 GPU）
+## 真实后端（VectorEngine 平台，OpenAI 兼容 API，无需 GPU）
 
-骨架默认全离线 mock。真实路径走 **Paratera 算力平台**（OpenAI 兼容；模型 `Qwen3-235B-A22B-Instruct-2507`）：
+骨架默认全离线 mock。真实路径走 **VectorEngine 平台**（OpenAI 兼容聚合 API；模型 `Qwen3-235B-A22B-Instruct-2507` + `text-embedding-3-small` 1536 维）。**平台切换零业务代码改动**——`make_model` 已通用化为"任何 OpenAI 兼容后端"，仅通过配置驱动（`configs/vectorengine.yaml`）：
 
 ```bash
-cp .env.example .env        # 填 PARATERA_API_KEY（仅放 .env，严禁提交；代码自动加载 .env）
+cp .env.example .env        # 填 VECTORENGINE_API_KEY（仅放 .env，严禁提交；代码自动加载 .env）
 uv sync --extra api         # 装 openai 客户端（smolagents.OpenAIServerModel）
 
-uv run synapse probe                # ① 输出形态探针：鉴权 + CodeAct 可解析 + token 计数
-uv run synapse signal --rounds 5    # ② 真实 A/B + 字节方向判定，存档到 runs/
-uv run synapse m7 --g1 5 --g2 5     # ③ 跨组记忆复用（G2 复用 G1 记忆）
-uv run synapse coqa --convs 3       # ④ CoQA 真实数据集记忆复用
-uv run synapse hotpot --n 20        # ⑤ HotpotQA 丢干扰段，真实 token + F1
-uv run synapse musique --n 10 --retrieval twohop  # ⑥ MuSiQue 多跳链式检索
-uv run synapse signal --rounds 5 --no-memory      # ⑦ B3 ablation：无记忆对照（证归因）
+uv run --extra api synapse probe   --config configs/vectorengine.yaml                # ① 鉴权 + CodeAct 可解析 + token 计数
+uv run --extra api synapse signal  --config configs/vectorengine.yaml --rounds 5    # ② 三档协议演化 + 残差收缩 + 记忆命中
+uv run --extra api synapse signal  --config configs/vectorengine.yaml --rounds 5 --no-memory  # ③ B3 ablation：无记忆对照（证归因）
+uv run --extra api synapse hotpot  --config configs/vectorengine.yaml --n 10        # ④ HotpotQA 丢干扰段，真实 token + F1
+uv run --extra api synapse musique --config configs/vectorengine.yaml --n 3 --retrieval twohop  # ⑤ MuSiQue 多跳链式检索
+uv run --extra api synapse coqa    --config configs/vectorengine.yaml --convs 3     # ⑥ CoQA 对话式记忆复用
+uv run --extra api synapse m7      --config configs/vectorengine.yaml --g1 5 --g2 5 # ⑦ 跨组记忆复用（G2 复用 G1）
 ```
 
 各命令把字节/token/命中率/时延轨迹写入 `runs/<命令>_<时间戳>/result.json`。
@@ -108,27 +108,28 @@ docker run --rm --env-file .env synapse:latest signal --rounds 10            # �
 
 ## 实验结果（赛题 M8）
 
-详细报告见 `docs/实验报告-2026-07-08-update.md`。关键结果（真实 API，Qwen3-235B-A22B-Instruct-2507，temp=0）：
+详细报告见 `docs/实验报告-2026-07-24-update.md`。关键结果（真实 API，VectorEngine 平台，`Qwen3-235B-A22B-Instruct-2507` + `text-embedding-3-small`，temp=0）：
 
 ### 通信效率 + 答案质量（三数据集 per-dataset 最优配置）
 
 | 数据集 | N | 检索模式 | token 节省 | text F1 | synapse F1 | ΔF1 | 金标召回 |
 |---|---|---|---|---|---|---|---|
-| HotpotQA (bridge 型) | 20 | single k=3 | **75.5%** | 0.714 | 0.757 | **+0.043** | 0.85 |
-| MuSiQue (链式多跳) | 10 | twohop k=3 | **84.3%** | 0.170 | 0.240 | **+0.070** | 0.70 |
-| CoQA (对话式 QA) | 3 conv | — | **9.7%** | 0.662 | 0.682 | **+0.020** | hit 0.92 |
+| HotpotQA (bridge 型) | 10 | single k=3 | **71.09%** | 0.780 | 0.680 | −0.100 | **0.900** |
+| MuSiQue (链式多跳) | 3 | twohop k=3 | **80.9%** | 0.524 | 0.857 | **+0.333** | 0.667 |
+| CoQA (对话式 QA) | 3 conv | — | **10.65%** | 0.656 | 0.684 | **+0.027** | hit 0.921 |
 
-> 三数据集均 ΔF1 ≥ 0：synapse 省 75-84% token（多文档场景）/ 9.7%（对话场景），答案质量不降反升。
-> 检索模式需匹配任务结构：HotpotQA→single 最优（twohop 引入噪声），MuSiQue→twohop 最优（补桥接段）。
+> 多跳场景 SYNAPSE 省 71-81% token；CoQA 对话场景"越长越省"（per-turn 增长 text 1.19-1.31× vs synapse 1.06-1.12×，末轮 gap 达 282 tokens）。
+> 检索模式需匹配任务结构：HotpotQA→single（bridge 并行），MuSiQue→twohop（链式依赖，ΔF1+0.333）。
 
-### 机制验证：记忆增长 → 残差率下降（+ B3 无记忆 ablation 归因）
+### 机制验证：三档协议演化 + 记忆因果归因（97.6%）
 
-| 条件 | 残差率 drop% | 记忆命中率 |
-|---|---|---|
-| B1-full（有记忆） | **40.0%**（82→32 字节） | **0.8** |
-| B3-no-mem（记忆清空 ablation） | **6.4%**（几乎不降） | **0.0** |
+| 条件 | 残差字节轨迹 | drop% | 记忆命中率 |
+|---|---|---|---|
+| B1-full（有记忆） | 2787→1812→1410→1374→960 | **65.6%** | **0.8** |
+| B3-no-mem（记忆清空 ablation） | 2772→2802→2754→2778→2727 | **1.6%** | **0.0** |
 
-> 记忆清空后 drop 从 40%→6.4%，残差率下降的幅度**因果源于记忆复用**（假设3 归因验证）。
+> **三档协议演化**：首轮冷启动走 residual 档（零基 2787 字节），第 2 轮起记忆命中切 embedding 档，字节单调降至 960，全程 0 次 text 回退。
+> 记忆清空后 drop 从 65.6%→1.6%，**残差收缩的 97.6% 因果源于记忆复用**（B3 ablation 归因）。
 
 ---
 
@@ -157,9 +158,9 @@ synapse/
 
 ## 技术栈
 
-- **LLM 后端**：Paratera 算力平台（OpenAI 兼容 API，`Qwen3-235B-A22B-Instruct-2507`，MoE 22B 激活）
+- **LLM 后端**：VectorEngine 平台（OpenAI 兼容 API，`Qwen3-235B-A22B-Instruct-2507`，MoE 22B 激活；平台可切换，`make_model` 通用化）
 - **Agent 框架**：[smolagents](https://github.com/huggingface/smolagents)（CodeAct 执行）
-- **非文本状态**：句向量嵌入（本地 `GLM-Embedding-3` 兼容）+ 预测残差编码
+- **非文本状态**：句向量嵌入（`text-embedding-3-small` 1536 维，OpenAI 兼容；离线 `HashEmbedder` 兜底）+ 预测残差编码
 - **包管理**：[uv](https://docs.astral.sh/uv/)
 - **容器**：Docker（openEuler 24.03-LTS 基础镜像）
 

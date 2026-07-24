@@ -21,17 +21,27 @@ class Consolidator:
         self._cfg = cfg
 
     def consolidate(self, store) -> int:
-        """按 topic 对 evidence 单元 embedding 取均值并归一化 → 建/更新原型。返回更新的原型数。"""
-        groups: dict[str, list[list[float]]] = {}
+        """按 topic 对 evidence 单元 embedding 取均值并归一化 → 建/更新原型。返回更新的原型数。
+
+        §3.1/§3.4：聚合时排除已取代单元（沿演化链只保留活跃版本），统计 evidence 条数与覆盖
+        task 数传给 upsert_prototype，生成有信息量的增量摘要。
+        """
+        groups_emb: dict[str, list[list[float]]] = {}
+        groups_task: dict[str, set[str]] = {}
         for u in store.all():
-            if u.kind == "evidence" and u.embedding:
-                groups.setdefault(u.task_topic, []).append(u.embedding)
+            # 已取代的旧版不参与巩固（演化链上只留活跃节点）；原型本身(kind=experience)不参与
+            if u.kind == "evidence" and u.embedding and u.superseded_by is None:
+                groups_emb.setdefault(u.task_topic, []).append(u.embedding)
+                groups_task.setdefault(u.task_topic, set()).add(u.task_id or "")
         n = 0
-        for topic, embs in groups.items():
+        for topic, embs in groups_emb.items():
             if len(embs) < 2:  # 单样本无可巩固
                 continue
             dim = len(embs[0])
             centroid = [sum(e[i] for e in embs) / len(embs) for i in range(dim)]
-            store.upsert_prototype(topic, _normalize(centroid))
+            n_tasks = len({t for t in groups_task.get(topic, set()) if t})
+            store.upsert_prototype(
+                topic, _normalize(centroid), n_evidence=len(embs), n_tasks=n_tasks
+            )
             n += 1
         return n

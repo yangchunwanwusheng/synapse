@@ -22,6 +22,12 @@ class Metrics:
     llm_output_tokens: int = 0  # 真实 LLM 输出 token
     latency_s: float = 0.0
     quality: float = 0.0  # CoQA: 词级 F1
+    # §1.2 三档混合协议：发送方按预测基相似度预判选档，而非只靠接收方事后校验
+    tier_residual: int = 0  # residual 档（预测基强，sim≥阈值）
+    tier_embedding: int = 0  # embedding+text摘要档（预测基弱，0<sim<阈值）
+    tier_text: int = 0  # text 档（无预测基/首轮冷启动/校验失败回退）
+    frozen_snapshot_injections: int = 0  # §4.1 frozen-snapshot 记忆注入次数（保前缀缓存）
+    result_spills: int = 0  # §2.3 result 序列化超阈值 → CAS 句柄 + 短摘要 的 spill 次数
 
     @property
     def llm_total_tokens(self) -> int:
@@ -41,6 +47,16 @@ class Metrics:
             self.nontext_bytes += nb
         if msg.meta.get("fallback"):
             self.fallbacks += 1
+        # §1.2 三档混合协议档位统计（发送方预判标注，meta["tier"] ∈ residual|embedding|text）
+        tier = msg.meta.get("tier")
+        if tier == "residual":
+            self.tier_residual += 1
+        elif tier == "embedding":
+            self.tier_embedding += 1
+        elif tier == "text":
+            self.tier_text += 1
+        if msg.meta.get("spilled"):  # §2.3 result spill 降级
+            self.result_spills += 1
 
     def record_query(self, hit: bool) -> None:
         self.memory_queries += 1

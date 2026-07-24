@@ -131,8 +131,12 @@ class MockChatModel(Model):
 
 
 def make_model(cfg, role: str):
-    """按配置构造 smolagents 模型；真实路径用 OpenAIServerModel(Paratera 平台)。"""
-    if cfg.llm_backend == "paratera":
+    """按配置构造 smolagents 模型；真实路径用 OpenAIServerModel（OpenAI 兼容平台）。
+
+    支持任何 OpenAI 兼容后端（paratera / vectorengine / 其他）：只要 llm_backend != "mock"
+    且配齐 api_base + api_key，即走 OpenAIServerModel 同一代码路径。
+    """
+    if cfg.llm_backend != "mock":  # paratera / vectorengine / 任何 OpenAI 兼容平台
         from smolagents import OpenAIServerModel  # 需 [api] extra（openai 包）
 
         key = cfg.api_key()
