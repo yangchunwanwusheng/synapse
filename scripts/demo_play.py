@@ -455,7 +455,7 @@ def run(speed=1.0, dry=False):
             (40,  "L4 三数据集",    lambda: L4(data, speed)),
             (35,  "L5 收缩+因果",   lambda: L5(data, speed)),
             (32,  "L6 记忆复用",    lambda: L6(data, speed)),
-            (25,  "L7 总结",        lambda: L7(speed)),
+            (25,  "L7 总结",        lambda: L7(data, speed)),
         ]
         scene_end = 0
         for dur, label, fn in scenes:
