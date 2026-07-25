@@ -24,6 +24,17 @@ PROJ_ROOT="$(pwd)"
 PLAY_SCRIPT="$PROJ_ROOT/scripts/demo_play.py"
 DATA_FILE="$PROJ_ROOT/dashboard/data.json"
 
+# ===== 强制 UTF-8 环境（防止中文乱码，必须在任何输出前设置）=====
+# 某些终端/locale 默认非 UTF-8，会导致中文输出乱码。这里强制设为 UTF-8。
+export LANG="${LANG:-zh_CN.UTF-8}"
+export LC_ALL="${LC_ALL:-zh_CN.UTF-8}"
+export PYTHONIOENCODING="utf-8"
+# 兜底：若 zh_CN.UTF-8 locale 未安装，回退到 C.UTF-8（任何系统都有）
+if ! locale -a 2>/dev/null | grep -qi "^zh_CN\.utf8$\|^zh_CN\.UTF-8$"; then
+    export LANG="C.UTF-8"
+    export LC_ALL="C.UTF-8"
+fi
+
 # 颜色
 G="\033[32m"; Y="\033[33m"; C="\033[36m"; R="\033[0m"; B="\033[1m"; RED="\033[31m"
 

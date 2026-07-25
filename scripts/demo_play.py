@@ -24,6 +24,21 @@ SYNAPSE 演示视频终端动画引擎（demo_play.py）
 from __future__ import annotations
 import sys, os, json, time, subprocess, argparse, shutil
 
+# ===== 强制 UTF-8 环境（防止中文乱码，必须在任何输出前设置）=====
+# 根因：某些终端/locale 环境下 stdout 默认编码不是 UTF-8，导致中文输出乱码。
+# 这里强制设置 PYTHONIOENCODING、stdout/stderr reconfigure、以及 LANG 环境变量。
+os.environ.setdefault("PYTHONIOENCODING", "utf-8")
+os.environ.setdefault("LANG", "zh_CN.UTF-8")
+os.environ.setdefault("LC_ALL", "zh_CN.UTF-8")
+try:
+    sys.stdout.reconfigure(encoding="utf-8")
+    sys.stderr.reconfigure(encoding="utf-8")
+except (AttributeError, Exception):
+    # Python < 3.7 无 reconfigure，用 io 包装
+    import io
+    sys.stdout = io.TextIOWrapper(sys.stdout.buffer, encoding="utf-8")
+    sys.stderr = io.TextIOWrapper(sys.stderr.buffer, encoding="utf-8")
+
 # ---------- 配色 ----------
 class C:
     R = "\033[0m"        # reset
