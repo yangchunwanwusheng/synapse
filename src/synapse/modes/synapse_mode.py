@@ -59,6 +59,7 @@ class SynapseSession:
         summ = sched.agent("summarizer")
 
         tok0 = team.llm_tokens()
+        ti0, to0 = team.token_io()  # 新口径（M8 真实通信成本）
         t0 = time.perf_counter()
 
         # 计划（结构化头，不透传长文本）
@@ -210,6 +211,9 @@ class SynapseSession:
 
         m.latency_s = time.perf_counter() - t0
         m.llm_tokens = team.llm_tokens() - tok0
+        ti, to = team.token_io()
+        m.llm_input_tokens = ti - ti0
+        m.llm_output_tokens = to - to0
         m.quality = 1.0 if conclusion else 0.0
         return {
             "metrics": m,
