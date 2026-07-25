@@ -1,0 +1,106 @@
+{
+  "hotpot": {
+    "text_input_tokens": 14149,
+    "syn_input_tokens": 4073,
+    "text_wire": 59735,
+    "syn_wire": 3201,
+    "llm_token_saved_pct": 71.21,
+    "wire_saved_pct": 94.64,
+    "text_f1": 0.78,
+    "syn_f1": 0.68,
+    "gold_recall": 0.9,
+    "n_items": 10
+  },
+  "musique": {
+    "llm_token_saved_pct": 81.08,
+    "text_f1": 0.524,
+    "syn_f1": 0.857,
+    "gold_recall": 0.667,
+    "n_items": 3
+  },
+  "coqa": {
+    "llm_token_saved_pct": 10.65,
+    "text_f1": 0.635,
+    "syn_f1": 0.667,
+    "hit_rate": 0.921,
+    "memory_hits": 35,
+    "n_convs": 3,
+    "gaps": [
+      {
+        "turns": 12,
+        "gap": 514
+      },
+      {
+        "turns": 11,
+        "gap": 321
+      },
+      {
+        "turns": 15,
+        "gap": 1357
+      }
+    ]
+  },
+  "b1": {
+    "contraction": [
+      2787,
+      1812,
+      1410,
+      1374,
+      960
+    ],
+    "drop_pct": 65.6,
+    "hit_rate": 0.8,
+    "neg_contraction": [
+      2718,
+      2958,
+      3039,
+      3039,
+      2973
+    ],
+    "neg_drop_pct": -9.4,
+    "tiers": {
+      "tier_residual": 1,
+      "tier_embedding": 4,
+      "tier_text": 0
+    },
+    "frozen_injections": 4,
+    "fallbacks": 0
+  },
+  "b3": {
+    "contraction": [
+      2772,
+      2802,
+      2754,
+      2778,
+      2727
+    ],
+    "drop_pct": 1.6,
+    "hit_rate": 0.0,
+    "neg_contraction": [
+      2787,
+      2790,
+      2685,
+      2817,
+      2715
+    ],
+    "neg_drop_pct": 2.6,
+    "tiers": {
+      "tier_residual": 5,
+      "tier_embedding": 0,
+      "tier_text": 0
+    },
+    "frozen_injections": 0,
+    "fallbacks": 0
+  },
+  "attribution_976": 97.6,
+  "m7": {
+    "wire_saved_pct": 40.67
+  },
+  "_meta": {
+    "real_runs": 77,
+    "datasets": 3,
+    "os": "openEuler 24.03-LTS-SP3",
+    "model": "qwen3-235b-a22b-instruct-2507",
+    "slogan": "协作即压缩 / 越用越省、越用越聪明"
+  }
+}
