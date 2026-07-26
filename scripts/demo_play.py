@@ -65,10 +65,128 @@ def flush(): sys.stdout.flush()
 def sleep(s, speed=1.0):
     time.sleep(max(0.001, s / speed))
 
+# ===== ASCII 降级模式（物理控制台无中文字形时用）=====
+# 开启 --ascii 后，所有中文输出自动翻译为英文，保证无中文字体的控制台也能看清。
+ASCII_MODE = False
+
+# 中文 → 英文 翻译表（覆盖演示所有关键文案；未命中的中文降级为拼音/占位）
+_ZH_EN = {
+    # slogan / 标题
+    "协作即压缩": "Coordination = Compression",
+    "协　作　即　压　缩": "C O O R D I N A T I O N   =   C O M P R E S S I O N",
+    "越用越省、越用越聪明": "cheaper & smarter with use",
+    "面向多智能体协作的低开销通信、非文本状态传递与共享记忆机制": "Low-cost communication, non-text state transfer & shared memory for multi-agent collaboration",
+    "第三届中国研究生操作系统开源创新大赛 · 社区赛题": "3rd China Graduate OS Open-Source Innovation Contest · Community Track",
+    "把多智能体协作建模为": "Modeling multi-agent collaboration as",
+    "带增长记忆边信息的 Wyner-Ziv 信源编码": "Wyner-Ziv source coding with growing side-information",
+    "通信字节随经验向信息地板收缩 ——": "comm bytes shrink toward info floor as experience grows --",
+    "次真实实验": " real experiments", "个标准数据集": " standard datasets",
+    # 镜头标题
+    "封面": "[Cover]", "环境验证": "[Env Check]", "痛点": "[Pain Points]", "方案": "[Solution]",
+    "离线自检": "[Smoke Test]", "三数据集": "[3 Datasets]", "收缩": "[Contraction]",
+    "因果": "[Causality]", "记忆复用": "[Memory Reuse]", "总结": "[Summary]",
+    "目标环境：openEuler 24.03-LTS-SP3": "Target: openEuler 24.03-LTS-SP3",
+    "痛点：多智能体协作的三大瓶颈": "3 bottlenecks of multi-agent collaboration",
+    "离线自检：5 项全 PASS（真实执行）": "Smoke test: 5/5 PASS (real execution)",
+    "三数据集主结果：token 压缩 71–82%": "3 datasets: 71-82% token reduction",
+    "协作速率收缩律 + 97.6% 因果归因": "Contraction law + 97.6% causal attribution",
+    "共享记忆：越长越省 + 命中 0.921": "Shared memory: longer=cheaper, hit 0.921",
+    # L1
+    "真实运行环境，零伪造 —— 这台机器就是 openEuler": "Real runtime, no fake -- this IS openEuler",
+    "证明这不是 PPT，是真实运行的 openEuler 系统：": "Proof this is real openEuler, not a PPT:",
+    "官方要求环境：openEuler 24.03-LTS-SP3  ——  就位。": "Required env openEuler 24.03-LTS-SP3 -- READY.",
+    # L2 痛点
+    "三个瓶颈，一个统一框架解决": "3 bottlenecks, 1 unified framework",
+    "① Token 黑洞": "[1] Token black hole",
+    "② 状态失真": "[2] State distortion",
+    "③ 经验蒸发": "[3] Experience evaporation",
+    "Agent 间用自然语言反复传话，通信账单爆炸，复杂度 O(N²)": "Agents chat in natural language, comm cost explodes, O(N^2)",
+    "中间推理结果反复文本编解码，语义损耗 + 时延": "mid-results re-encoded as text repeatedly: semantic loss + latency",
+    "任务做完就忘，对话越长 token 堆积越快（实测放大 1.31×）": "forget after each task; longer chats pile up tokens (measured 1.31x)",
+    "的回答 —— 协作即压缩：": "answer -- Coordination = Compression:",
+    "发送方预测接收方已知，只传「惊讶残差」": "sender predicts what receiver knows, sends only 'surprise residual'",
+    "非文本状态用 CAS 句柄零拷贝传递": "non-text state via CAS handle (zero-copy)",
+    "经验沉淀进共享记忆，越用预测越准、残差越稀疏": "experience sinks into shared memory; better prediction, sparser residual",
+    # L3
+    "零密钥秒出 PASS —— 核心机制完整、可信": "instant PASS, no API key -- core mechanisms intact",
+    "五项自检全过：双模式 / 省字节 / 记忆命中 / 收缩 / 负例区分": "5/5 passed: dual-mode / byte-saving / memory-hit / contraction / negative-distinguish",
+    # L4
+    "在金标召回 ≥0.90 前提下，单任务 LLM 计费 token 大幅压缩": "with gold recall >=0.90, LLM billing token largely compressed",
+    "数据集": "Dataset", "金标召回": "gold/hit",
+    "单任务 HotpotQA · LLM token 节省：": "HotpotQA LLM token saved: ",
+    "端到端物理线缆字节节省：": "end-to-end wire bytes saved: ",
+    "（N=200 大样本配对 95%CI 含 0，质量与全文基线统计不可区分）": "(N=200 paired 95%CI includes 0; quality indistinguishable from baseline)",
+    # L5
+    "记忆越多，残差越稀疏；关闭记忆则不收缩 —— 机制是因果而非巧合": "more memory -> sparser residual; w/o memory no shrink -- causal, not coincidence",
+    "残差字节随任务轮次演化（真实数据 signal run · B1 完整链路）：": "residual bytes over rounds (real signal run, B1-full):",
+    "完整": "full", "关记忆": "no-mem", "负例(无共享)": "negative(no-share)",
+    "收缩": "shrink", "仅": "only", "反升": "rise",
+    "命中": "hit",
+    "因果归因 —— 通信压缩中源于记忆复用的比例：": "causal attribution -- fraction of compression from memory reuse:",
+    "= (B1 收缩 65.6% − B3 收缩 1.6%) / B1": "= (B1 shrink 65.6% - B3 shrink 1.6%) / B1",
+    ">>> 教科书级因果证明：97.6% 的压缩是记忆复用机制带来的，不是随机波动。": ">>> textbook causal proof: 97.6% of compression comes from memory reuse, not noise.",
+    # L6
+    "记忆复用从「成本」变为「红利」—— 对话越长，节省越大": "memory reuse: from 'cost' to 'dividend' -- longer chat, more savings",
+    "对话式 QA · 记忆命中率：": "conversational QA memory hit-rate: ",
+    "（35/38 轮命中历史记忆，跨轮复用经验）": "(35/38 turns hit history memory, cross-turn reuse)",
+    "「越长越省」曲线 —— text 基线 O(n²) 堆积 vs SYNAPSE 平缓：": "'longer=cheaper' curve: text baseline O(n^2) vs SYNAPSE flat:",
+    "对话": "conv", "轮数": "turns", "末轮省 token": "last-turn saved", "效果": "effect",
+    "省": "saved", "越长省越多 ↑": "longer=more ↑",
+    "（15 轮最长）末轮省 1357 token —— 对话越长，红利越大。": "(15 turns, longest) last-turn saves 1357 tokens -- longer chat, bigger dividend.",
+    "三档混合协议自动选档（signal 真实计数）：": "3-tier hybrid protocol auto-selection (signal real counts):",
+    "档": "-tier", "次": "x", "回退": "fallback",
+    "✓ 零降级回退（fallbacks=0），frozen 记忆快照注入 4 次": "[OK] zero fallback (fallbacks=0), frozen-snapshot injected 4x",
+    # L7
+    "首次把信源编码的": "first introduces source-coding",
+    "理论": "theory",
+    "引入多智能体协作，": "into multi-agent collaboration;",
+    "用一个统一的压缩框架同时解决通信、状态、记忆三大瓶颈 ——": "one unified compression framework solves comm + state + memory together --",
+    "线缆字节节省": "wire bytes saved", "静默损坏": "silent corruption",
+    "零静默损坏": "zero silent corruption",
+    "演示完成": "demo complete",
+    "（目标 ≤5 分钟 / 300s）": "(target <=5 min / 300s)",
+    "实际用时": "actual time",
+    # smoke 真实命令输出（L3）
+    "双模式都产出结论": "both modes produce conclusion",
+    "省线缆字节": "saves wire bytes", "记忆复用命中": "memory-reuse hit",
+    "关联任务": "related task", "收缩": "contraction",
+    "末轮非文本字节<=首轮": "last-round nontext bytes <= first",
+    "首轮": "first round", "区分度": "discrimination",
+    "负例命中率<关联命中率": "negative hit-rate < related hit-rate",
+    "负例命中率": "neg hit-rate", "关联命中率": "related hit-rate",
+    # 零散单位/词
+    "记忆命中率": "memory hit-rate", "对话式": "conversational",
+    "轮命中历史记忆": "turns hit history memory", "跨轮复用经验": "cross-turn reuse",
+}
+
+def _tr(text):
+    """ASCII 降级：把中文翻译成英文。非 ASCII 模式原样返回。"""
+    if not ASCII_MODE:
+        return text
+    # 先做整串精确替换（处理长 slogan）
+    out = text
+    # 按 key 长度降序替换，避免短 key 截断长 key
+    for zh in sorted(_ZH_EN.keys(), key=len, reverse=True):
+        if zh in out:
+            out = out.replace(zh, _ZH_EN[zh])
+    # 残留的 CJK 中文字符 → 删除（翻译表应覆盖全部，这里兜底）
+    # 注意：保留 box-drawing(╔╗║═) 和 block(█░●) 等符号——它们在 VGA 字体里有字形
+    out = "".join(ch for ch in out
+                  if ord(ch) < 128            # ASCII
+                  or 0x2500 <= ord(ch) <= 0x257F  # box drawing
+                  or 0x2580 <= ord(ch) <= 0x259F  # block elements
+                  or ord(ch) == 0x2022           # bullet ●
+                  or ord(ch) == 0x2192           # arrow →
+                  or ord(ch) == 0x2191           # arrow ↑
+                  or 0xFF01 <= ord(ch) <= 0xFF5E # 全角符号（！？等，VGA 通常能显示）
+                  or ord(ch) < 0x4E00            # 非中日韩的拉丁扩展等
+                  or ord(ch) > 0x9FFF)           # 非 CJK
+    return out
+
 # 写到屏幕并自动换行（带可选颜色）
 last_lines = 0
 def put(text=""):
-    sys.stdout.write(text + "\n")
+    sys.stdout.write(_tr(text) + "\n")
     flush()
 
 def banner_progress(elapsed, total, label):
@@ -80,7 +198,7 @@ def banner_progress(elapsed, total, label):
     mm, ss = divmod(int(elapsed), 60)
     move(1, 1)
     sys.stdout.write("\033[2K")
-    sys.stdout.write(f"{C.DIM}[{mm:02d}:{ss:02d} / 04:00]{C.R} {bar} {C.ORANGE}{C.B}{label}{C.R}")
+    sys.stdout.write(_tr(f"{C.DIM}[{mm:02d}:{ss:02d} / 04:00]{C.R} {bar} {C.ORANGE}{C.B}{label}{C.R}"))
     flush()
 
 def subtitle(text, color=C.CYAN):
@@ -95,7 +213,7 @@ def clear_subtitle():
 def typewriter(text, color="", delay=0.012, speed=1.0):
     """打字机效果，逐字输出。"""
     for ch in text:
-        sys.stdout.write(color + ch)
+        sys.stdout.write(_tr(color + ch))
         flush()
         sleep(delay, speed)
     sys.stdout.write(C.R)
@@ -105,7 +223,7 @@ NO_ANIM = False  # 全局开关：True 时跳过数字滚动（直接显示终�
 def count_up(target, suffix="", color=C.ORANGE, dur=0.9, fmt="{:.1f}", speed=1.0, prefix=""):
     """数字滚动动画：从 0 滚到 target。在新的一行上原地滚动（用 \r 覆盖本行）。"""
     if NO_ANIM:
-        sys.stdout.write(f"{prefix}{color}{C.B}{fmt.format(target)}{suffix}{C.R}\n"); flush()
+        sys.stdout.write(_tr(f"{prefix}{color}{C.B}{fmt.format(target)}{suffix}{C.R}\n")); flush()
         sleep(0.3, speed); return
     full = fmt.format(target) + suffix
     steps = 14  # 固定帧数，兼顾流畅与录制整洁
@@ -113,10 +231,10 @@ def count_up(target, suffix="", color=C.ORANGE, dur=0.9, fmt="{:.1f}", speed=1.0
     for i in range(steps + 1):
         e = 1 - (1 - i / steps) ** 3  # ease-out
         v = target * e
-        sys.stdout.write(f"\r{prefix}{color}{C.B}{fmt.format(v)}{suffix}{C.R}")
+        sys.stdout.write(_tr(f"\r{prefix}{color}{C.B}{fmt.format(v)}{suffix}{C.R}"))
         flush()
         sleep(dur / steps, speed)
-    sys.stdout.write(f"\r{prefix}{color}{C.B}{fmt.format(target)}{suffix}{C.R}\n")
+    sys.stdout.write(_tr(f"\r{prefix}{color}{C.B}{fmt.format(target)}{suffix}{C.R}\n"))
     flush()
 
 def real_cmd(cmd, label="", speed=1.0, max_lines=18):
@@ -137,10 +255,10 @@ def real_cmd(cmd, label="", speed=1.0, max_lines=18):
         low = ln.lower()
         if "pass" in low or "ok" in low or "✓" in ln: col = C.GREEN
         elif "fail" in low or "error" in low: col = C.RED
-        sys.stdout.write(f"{col}{ln}{C.R}\n"); flush()
+        sys.stdout.write(_tr(f"{col}{ln}{C.R}\n")); flush()
         sleep(0.04, speed)
     if len(lines) > max_lines:
-        sys.stdout.write(f"{C.DIM}  ... ({len(lines)-max_lines} 行省略){C.R}\n"); flush()
+        sys.stdout.write(_tr(f"{C.DIM}  ... ({len(lines)-max_lines} lines omitted){C.R}\n")); flush()
     out_lines = lines
     return out_lines, ok
 
@@ -314,7 +432,7 @@ def L3(data, speed, dry):
                    "  [PASS] 区分度(负例命中率<关联命中率)",
                    "SMOKE PASSED"]:
             col = C.GREEN if "PASS" in ln else C.WHITE
-            sys.stdout.write(f"{col}{C.B}{ln}{C.R}\n"); flush(); sleep(0.18, speed)
+            sys.stdout.write(_tr(f"{col}{C.B}{ln}{C.R}\n")); flush(); sleep(0.18, speed)
     else:
         real_cmd("uv run synapse smoke 2>&1 | tail -8", speed=speed, max_lines=10)
     sleep(0.4, speed)
@@ -505,11 +623,13 @@ def main():
     ap.add_argument("--dry", action="store_true", help="跳过真实命令执行（纯动画）")
     ap.add_argument("--speed", type=float, default=1.0, help="播放速度倍率（默认 1.0）")
     ap.add_argument("--no-anim", action="store_true", help="关闭数字滚动，直接显示终值（录制保险）")
+    ap.add_argument("--ascii", action="store_true", help="ASCII 降级模式（中文翻译为英文，供无中文字体的物理控制台使用）")
     args = ap.parse_args()
     if args.speed <= 0:
-        print("speed 必须 > 0"); sys.exit(1)
-    global NO_ANIM
+        print("speed must > 0"); sys.exit(1)
+    global NO_ANIM, ASCII_MODE
     NO_ANIM = args.no_anim
+    ASCII_MODE = args.ascii
     run(speed=args.speed, dry=args.dry)
 
 if __name__ == "__main__":

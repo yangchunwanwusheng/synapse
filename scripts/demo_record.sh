@@ -118,6 +118,17 @@ if [ "${DRY_FALLBACK:-0}" = "1" ] && [[ "$@" != *"--dry"* ]]; then
     PASS_ARGS="--dry $@"
 fi
 echo -e "  附加参数：${C}${PASS_ARGS:-（无，标准模式）}${R}"
+
+# ---------- 中文显示能力检测（物理控制台不支持中文，自动建议 --ascii）----------
+TTY_NOW=$(tty 2>/dev/null || echo "")
+if echo "$TTY_NOW" | grep -qE "/tty[0-9]"; then
+    # 在物理控制台 text-mode tty 上，内核不支持中文显示
+    if [[ "$PASS_ARGS" != *"--ascii"* ]]; then
+        echo -e "${Y}  ⚠ 检测到物理控制台($TTY_NOW)：text-mode 不支持中文显示（会显示方块）${R}"
+        echo -e "${Y}    已自动加 --ascii（中文翻译为英文）。如需中文请改用 SSH 远程客户端录制。${R}"
+        PASS_ARGS="$PASS_ARGS --ascii"
+    fi
+fi
 echo
 
 # ---------- 录制提示 + 倒计时 ----------
