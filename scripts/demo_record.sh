@@ -104,9 +104,10 @@ COLS=$(tput cols 2>/dev/null || echo 80)
 LINES=$(tput lines 2>/dev/null || echo 24)
 if [ "$COLS" -lt 100 ] || [ "$LINES" -lt 30 ]; then
     echo -e "${Y}  ⚠ 当前终端 ${COLS}x${LINES}，建议至少 100x30（全屏 + 大字体）${R}"
+    echo -e "    本演示最宽表格约 90 列（L7 五评分维度表），低于 100 列可能折行。"
     echo -e "    录制效果最佳分辨率：1920x1080，终端全屏，字体 16-18pt 等宽。"
 else
-    echo -e "${G}  ✓ 终端尺寸 ${COLS}x${LINES}，OK${R}"
+    echo -e "${G}  ✓ 终端尺寸 ${COLS}x${LINES}，OK（最宽表格约 90 列，不会折行）${R}"
 fi
 echo
 
