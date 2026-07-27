@@ -80,19 +80,103 @@ SYNAPSE 不是概念图上的算法组合，而是一套可以编译、运行、
 
 项目初期在大赛指定 openEuler 环境对应的 Docker 容器中完成基础编译、运行与测试；项目后期迁移至安装 **openEuler 24.03-LTS-SP3** 的真实服务器，并在原生操作系统环境中重新完成编译、运行和测试。
 
-本机需要 Python 3.11+ 与 [uv](https://docs.astral.sh/uv/)。离线自检不依赖 API Key：
+### 环境与安装
+
+需要 Python 3.11+ 与 [uv](https://docs.astral.sh/uv/)。
 
 ```bash
-uv sync
-uv run synapse smoke
-uv run synapse ab --rounds 10 --config configs/default.yaml
+uv sync                                                       # 基础：仅离线 mock 自检所需
+uv sync --extra api --extra embed --extra vector --extra config   # 真实 API 评测所需
+uv sync --extra dev                                           # 测试与 lint（pytest / ruff）
 ```
 
-在 openEuler 容器中运行：
+可选依赖按用途拆分（见 `pyproject.toml`）：`api`（真实 LLM）、`embed`（真实句向量）、`vector`（向量检索）、`config`（YAML 覆盖）、`viz`（实验作图）、`dev`（开发）。
+
+### ① 离线自检（零 API Key）
+
+```bash
+uv run synapse smoke
+```
+
+校验双模式跑通、残差节省、记忆复用命中与负例区分度——无网络、无密钥，验证机制本身成立。
+
+### ② 接入真实 API
+
+复制 `.env.example` 为 `.env` 并填入密钥（`.env` 已被 `.gitignore` 忽略，严禁提交）：
+
+```
+VECTORENGINE_API_KEY=<your-key>
+```
+
+默认走 **VectorEngine**（OpenAI 兼容聚合平台，见 `configs/vectorengine.yaml`）；切换其他 OpenAI 兼容平台只需改 YAML 的 `api_base / api_key_env / model`，无需改代码。接通后先用探针确认鉴权、输出形态（非 thinking）、CodeAct 可解析与真实 token 计数：
+
+```bash
+uv run synapse probe --config configs/vectorengine.yaml
+```
+
+> 两份配置：`configs/default.yaml`（离线 mock，hash embedder）用于机制自检；`configs/vectorengine.yaml`（真实 LLM `qwen3-235b-a22b-instruct-2507` + 句向量 `text-embedding-3-small`）用于真实评测。所有命令均支持 `--config` 覆盖。
+
+### ③ 真实数据集评测
+
+数据集**不随仓库分发**，需先抓取（经 HuggingFace datasets-server，无重依赖）：
+
+```bash
+uv run python scripts/fetch_hotpot.py 20     # → data/hotpot_sample.json   （10 段/题，2 金标 + 8 干扰）
+uv run python scripts/fetch_musique.py 20    # → data/musique_sample.json  （20 段/题，干扰更密）
+uv run python scripts/fetch_coqa.py 5        # → data/coqa_sample.json     （对话式，关联连续任务）
+```
+
+复现论文实验（对应“实验，让机制自己说话”一节的核心数字）：
+
+| 命令 | 对应结果 |
+| --- | --- |
+| `uv run synapse hotpot --config configs/vectorengine.yaml --n 10 --embedder api --k 3` | HotpotQA Token ↓ **71.09%** |
+| `uv run synapse musique --config configs/vectorengine.yaml --n 10 --embedder api --k 3` | MuSiQue Token ↓ **80.90%**、ΔF1 = **+0.333** |
+| `uv run synapse hotpot-stats --config configs/vectorengine.yaml --n 50 --repeats 3` | 统计稳健化：配对检验 + 95% CI（质量非劣验证） |
+| `uv run synapse coqa --config configs/vectorengine.yaml --convs 2 --embedder api --k 6` | CoQA 对话式真实 token + F1 |
+
+`--retrieval single|twohop|bridge` 切换单跳 / 嵌入查询扩展 / 词法实体桥接；`--seed` 固定题序以复现。
+
+### ④ 消融与机制验证
+
+```bash
+uv run synapse signal --config configs/vectorengine.yaml --rounds 5 --no-memory   # 记忆因果：无记忆对照（97.6% 收缩归因）
+uv run synapse m7 --config configs/vectorengine.yaml --g1 5 --g2 5                # 跨组记忆复用（G2 暖启动）
+uv run python scripts/sweep_hotpot_k.py --n 50 --ks 3 4 5 6 8                     # k-前沿：寻找诚实操作点
+uv run synapse ab --config configs/default.yaml --rounds 10                       # 合成任务双模式 A/B
+```
+
+### ⑤ 测试
+
+```bash
+uv run pytest
+```
+
+### ⑥ Docker / openEuler 容器
 
 ```bash
 docker build -t synapse:latest .
 docker run --rm synapse:latest
+```
+
+## 项目结构
+
+```
+src/synapse/
+  cli.py              命令行入口（smoke / ab / probe / signal / m7 / coqa / hotpot / musique / hotpot-stats）
+  config.py           配置：dataclass + YAML 覆盖
+  tasks.py            合成任务族（关联连续 / 负例族 / G1 / G2）
+  protocol/           结构化控制面：CNR 握手、能力发现、编码协商、任务路由
+  stateplane/         非文本状态面：residual（残差编码）/ embedding / cas（内容寻址）/ checksum
+  memory/             共享记忆：store / retrieval / consolidate / tom
+  modes/              text_mode（全文基线）/ synapse_mode（VLC：Verified Lossy Coordination）
+  runtime/            model（后端工厂）/ team（四类 Agent 编排）
+  qa/                 真实数据集 harness：dataset / harness / pipeline / scoring / stats
+  eval/               ABRunner / metrics
+  prompts.py
+configs/              default.yaml（离线 mock）/ vectorengine.yaml（真实 API）
+scripts/              fetch_coqa / fetch_hotpot / fetch_musique（数据集）/ sweep_hotpot_k（k-前沿）
+tests/                test_smoke / test_qa
 ```
 
 ---
