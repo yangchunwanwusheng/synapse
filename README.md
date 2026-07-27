@@ -3,12 +3,27 @@
 <p align="center">
   <strong>第三届中国研究生操作系统开源创新大赛 · 社区赛题作品</strong>
   <br>
-  <sub>4 Agents · Structured Protocol · Non-text State · Shared Memory · openEuler</sub>
+  <sub><em>Coordination as Compression — 让经验进入通信回路</em></sub>
+</p>
+
+<p align="center">
+  <img src="https://img.shields.io/badge/Python-3.11%2B-3776AB?style=flat-square&logo=python&logoColor=white" alt="Python" />
+  <img src="https://img.shields.io/badge/uv-package%20manager-de4f3f?style=flat-square" alt="uv" />
+  <img src="https://img.shields.io/badge/openEuler-24.03--LTS-002B5B?style=flat-square" alt="openEuler" />
+  <img src="https://img.shields.io/badge/smolagents-CodeAct-1C6EA4?style=flat-square" alt="smolagents" />
+  <img src="https://img.shields.io/badge/faiss-vector%20search-16A085?style=flat-square" alt="faiss" />
+</p>
+
+<p align="center">
+  <img src="https://img.shields.io/badge/VLC-Verified%20Lossy-C2185B?style=flat-square" alt="VLC" />
+  <img src="https://img.shields.io/badge/CNR-Protocol-8E44AD?style=flat-square" alt="CNR" />
+  <img src="https://img.shields.io/badge/ToM-Predictor-9B59B6?style=flat-square" alt="ToM" />
+  <img src="https://img.shields.io/badge/Shared_Memory-Evolution-E67E22?style=flat-square" alt="Shared Memory" />
 </p>
 
 ---
 
-## 从“文本接力”到“状态协同”
+## 🧭 从“文本接力”到“状态协同”
 
 多智能体系统不应把人类语言当作唯一的通信总线。
 
@@ -16,21 +31,21 @@
 
 **SYNAPSE 将这个问题重新定义为一项系统级的条件编码任务。** 接收方已经掌握的内容不必再次传输，发送方只需表达“预测之外的信息”。共享记忆不断积累，接收方的预测能力随之增强，真正需要传递的惊讶残差持续变小。
 
+> [!TIP]
 > **Memory ↑　→　Prediction ↑　→　Residual ↓　→　Communication ↓**
->
 > 经验越多，预测越准；预测越准，通信越省。
 
 这不是一次对提示词的局部优化，而是一套贯穿协议、状态、存储、校验与评测的完整协作机制：让多 Agent 从冗长的“文本接力”，升级为可积累、可验证、可演进的“状态协同”。
 
-## 三重机制，构成同一条链
+## 🔗 三重机制，构成同一条链
 
-### 01 · 结构化通信：先让 Agent 说同一种语言
+### 01　📡 结构化通信：先让 Agent 说同一种语言
 
 SYNAPSE 以统一消息协议承载动作、参数、结果与能力描述，并通过 CNR（Capability Negotiation & Resolution）完成握手、能力发现、编码协商与任务路由，可与业界 A2A Agent Card 标准做协议映射。自然语言不再承担全部控制职责，Agent 之间交换的是边界清晰、可以调度、可以度量的协作意图。
 
 **结果是：控制信息更短，协作关系更清楚，通信开销能够被真正计算。**
 
-### 02 · 非文本状态：只传递预测失败的部分
+### 02　🧬 非文本状态：只传递预测失败的部分
 
 系统把中间语义状态编码为句向量，利用共享记忆生成接收方预测，再计算残差 `Z = Y − Ŷ`——发送端不传完整向量，只对残差进行率失真编码、稀疏量化并写入内容寻址存储（CAS），在线缆上仅交换轻量句柄。该机制覆盖赛题要求的四个环节：
 
@@ -41,7 +56,7 @@ SYNAPSE 以统一消息协议承载动作、参数、结果与能力描述，并
 
 为了让“有损”不等于“不可靠”，SYNAPSE 设计了 **Verified Lossy Coordination（VLC）**：重构结果通过一致性校验后才进入下游；关键语义失配时自动提升精度或回退全文路径。系统既敢于压缩，也知道何时不能压缩。
 
-### 03 · 共享记忆：让一次协作成为下一次的边信息
+### 03　🧠 共享记忆：让一次协作成为下一次的边信息
 
 任务中的证据、摘要、策略与结论被沉淀为统一记忆单元（MemoryUnit），每条记忆至少记录**记忆 ID、来源 Agent、创建时间、任务主题与摘要描述**，并通过内容寻址生成唯一标识以支持去重。检索层同时支持赛题要求的三路召回——**关键词（BM25 倒排）、标签过滤、语义相似度（向量余弦）**，融合排序后选取最相关单元作为预测基；不同 Agent 在后续任务中可直接复用已有记忆，无需重复计算。
 
@@ -49,7 +64,7 @@ SYNAPSE 以统一消息协议承载动作、参数、结果与能力描述，并
 
 在 SYNAPSE 中，Memory 不只是知识仓库，它同时承担四个角色：**经验资产、状态预测器、通信压缩器与新颖性传感器。** 系统不再每次从零开始，而是在持续协作中形成“越用越省、越用越聪明”的正反馈。
 
-## 一条从协作到复用的闭环
+## 🔄 一条从协作到复用的闭环
 
 ![SYNAPSE 系统架构：结构化控制面、非文本状态面与共享记忆闭环](assets/architecture.drawio.png)
 
@@ -57,11 +72,13 @@ SYNAPSE 以统一消息协议承载动作、参数、结果与能力描述，并
 
 这条闭环的关键不在于把文本“压得更小”，而在于**减少需要表达的信息本身**：完整状态被改写为语义增量，历史经验被转化为解码端边信息，通信成本因此可以随协作深入而持续收缩。
 
-## 实验，让机制自己说话
+## 📊 实验，让机制自己说话
 
 ![SYNAPSE 真实 API 与公开数据集实验结果](assets/results.drawio.png)
 
-SYNAPSE 在 HotpotQA、MuSiQue 与 CoQA 三类真实任务上完成纯文本模式与结构化模式的同条件 A/B 评测，并以配对检验、因果消融和受损注入验证通信效率、答案质量与可靠性。实验设计包含**不少于 2 组关联性连续任务**：HotpotQA（bridge 型并行多跳）与 MuSiQue（链式 two-hop 多跳）构成第一组多跳结构对照，CoQA（38 轮长对话）与合成 G1→G2 演进序列构成第二组长程关联对照，覆盖赛题对关联任务验证的要求。
+SYNAPSE 在 HotpotQA、MuSiQue 与 CoQA 三类真实任务上完成纯文本模式与结构化模式的同条件 A/B 评测，并以配对检验、因果消融和受损注入验证通信效率、答案质量与可靠性。
+
+实验设计包含**不少于 2 组关联性连续任务**：HotpotQA（bridge 型并行多跳）与 MuSiQue（链式 two-hop 多跳）构成第一组多跳结构对照，CoQA（38 轮长对话）与合成 G1→G2 演进序列构成第二组长程关联对照，覆盖赛题对关联任务验证的要求。
 
 - **通信收缩：** HotpotQA Token 开销降低 **71.09%**、MuSiQue 降低 **80.90%**；端到端线缆字节节省 HotpotQA **94.64%**、MuSiQue **96.45%**（接近一个数量级）。
 - **质量竞争力：** HotpotQA 上 N=200 配对检验中，结构化模式与全文基线的答案质量在统计上不可区分（95% CI 含 0）；MuSiQue 上进一步取得 **ΔF1 = +0.333**。
@@ -69,36 +86,37 @@ SYNAPSE 在 HotpotQA、MuSiQue 与 CoQA 三类真实任务上完成纯文本模�
 - **可靠协作：** 在受控有损注入中，VLC 检出并回退全部 16 个受损样本，静默损坏为 **0**。
 - **意外发现：** 残差信号对分布漂移的检测 AUC 达 **1.0**——通信成本本身，成为一个模型无关且无需额外开销的系统健康信号。
 
-## 为真实系统而构建
+## 🛠️ 为真实系统而构建
 
 SYNAPSE 不是概念图上的算法组合，而是一套可以编译、运行、对照和测量的多智能体协作原型。上述三重机制贯穿赛题要求的五个工程模块：**多 Agent 运行时（runtime）·协议解析与调度（protocol）·状态交换（stateplane）·共享记忆存储与检索（memory）·评测（eval）**，形成可独立验证、可组合演进的完整系统：
 
-- **角色覆盖与连续任务：** Planner / Retriever / Executor / Summarizer 四类 CodeAgent 覆盖赛题全部四类角色，稳定执行**不少于 10 轮**连续任务（CoQA 实测 38 轮长对话），并设计了**不少于 2 组**关联性连续任务（合成 G1→G2 演进序列 + 三真实数据集跨任务对照）；
-- **双模式可复现对比：** text / synapse 双模式在相同任务、模型、配置与随机种子下完成顺序隔离式 A/B，统计消息次数、Token / 字符开销、非文本传递次数与规模、单任务耗时、记忆命中率与整体性能提升；
-- **系统技术加分项：** Executor 通过 **CodeAct** 在轻量沙箱中安全执行模型生成的 Python 代码；CAS 后端抽象为接口契约，提供基于**共享内存**的跨进程后端与 **faiss 向量检索**后端；整体可运行于 **openEuler 24.03-LTS 容器**——对应赛题鼓励的容器沙箱、IPC/共享内存、向量数据库方向；
-- **三档混合协议：** 发送方根据预测基强度在 residual / embedding / text 三档间主动预判选档，随协作经验动态演化；
-- **CAS 句柄分离：** 大状态从消息体中分离，内容句柄支持去重与按需恢复。
+- **四类角色，长程稳定：** Planner / Retriever / Executor / Summarizer 覆盖赛题全部四类角色，稳定执行**不少于 10 轮**连续任务（CoQA 实测 38 轮长对话）。
+- **双模式可复现对照：** text / synapse 在相同任务、模型、配置与随机种子下完成顺序隔离式 A/B，统一度量消息次数、Token / 字符开销、非文本传递规模、单任务耗时与记忆命中率。
+- **系统技术加分项：** Executor 经 **CodeAct** 在轻量沙箱安全执行模型生成代码；CAS 抽象为接口契约，提供**共享内存**跨进程后端与 **faiss 向量检索**后端；整体可运行于 **openEuler 24.03-LTS 容器**——覆盖赛题鼓励的容器沙箱、IPC / 共享内存、向量数据库方向。
+- **协议与状态自适应：** 发送方按预测基强度在 residual / embedding / text 三档间预判选档，随经验动态演化；大状态经 CAS 句柄与消息体分离，支持去重与按需恢复。
 
 我们希望证明的并不只是“某一次实验更省”，而是一条更具普适性的系统规律：
 
+> [!IMPORTANT]
 > **当多个智能体共享不断增长的经验，它们之间的通信成本应当随协作深入而下降，而不是继续线性甚至平方级增长。**
 
-## 破局定位：与主流方案对比
+## 🎯 破局定位：与主流方案对比
 
 当前多 Agent 协作的通信架构主要分三类。据我们所知，在黑盒 API 占据主流的现实约束下，SYNAPSE 是目前唯一同时满足“黑盒可部署、无需训练、传输量随经验递减、带校验回退”四个条件的方案。
 
 | 维度 | **SYNAPSE** | 自然语言对话<br>（AutoGen / CrewAI） | 工作流编排<br>（LangGraph） | 潜空间通信<br>（C2C / LatentMAS） |
 | --- | --- | --- | --- | --- |
 | 通信载体 | **句向量预测残差** | 自由文本 | JSON / 函数调用 | 隐状态 / 全量嵌入 |
-| 通信效率 | **高**（仅传预测外增量） | 低（每次重传全量上下文） | 中（局部结构化，主体仍文本） | 高（向量替代文本） |
-| 需白盒访问 | **否**（句向量黑盒可得） | 否 | 否 | **是**（需访问内部状态） |
-| 校验机制 | **有**（哈希校验 + 自动回退） | 文本无损，无需 | 文本无损，无需 | 无（存在静默损坏风险） |
-| 跨任务复用 | **有**（共享记忆 + 演化链） | 无 | 无 | 无 |
-| 传输量随经验 | **递减**（记忆→预测→残差稀疏） | 不变 | 不变 | 不变 |
+| 通信效率 | **高** 🟢（仅传预测外增量） | 低 🔴（每次重传全量上下文） | 中 🟡（局部结构化，主体仍文本） | 高 🟢（向量替代文本） |
+| 需白盒访问 | **否** ✅（句向量黑盒可得） | 否 ✅ | 否 ✅ | **是** ❌（需访问内部状态） |
+| 校验机制 | **有** ✅（哈希校验 + 自动回退） | 文本无损 ➖ | 文本无损 ➖ | 无 ❌（存在静默损坏风险） |
+| 跨任务复用 | **有** ✅（共享记忆 + 演化链） | 无 ❌ | 无 ❌ | 无 ❌ |
+| 传输量随经验 | **递减** 🟢（记忆→预测→残差稀疏） | 不变 ➖ | 不变 ➖ | 不变 ➖ |
 
-> 黑盒 API 占据主流的现实约束下，SYNAPSE 的句向量残差路线恰好填补了潜空间通信的空白区——既不要求访问模型内部隐状态，又保留了非文本状态传递的效率优势。
+> [!TIP]
+> 句向量残差路线恰好填补了潜空间通信的空白区——不要求访问模型内部隐状态，又保留了非文本状态传递的效率优势。这是 latent 通信在商用闭源 API 时代的务实落地。
 
-## 赛题维度对照
+## 📋 赛题维度对照
 
 按大赛公布的五个评分维度逐项对照，每一维均有实现回应与实验数据支撑（详细数据见图表与《SYNAPSE 项目说明书》§4 / §6.4）。
 
@@ -110,7 +128,7 @@ SYNAPSE 不是概念图上的算法组合，而是一套可以编译、运行、
 | **系统完整性**（20） | 五模块架构 + 四类 CodeAgent + CodeAct 沙箱 + 可插拔 CAS（含跨进程共享内存后端） | 离线 smoke **5 项 PASS**；pytest 覆盖编解码/检索/路由；openEuler 24.03-LTS 验证 |
 | **实验验证**（15） | 顺序隔离式 A/B（相同任务/模型/种子）+ 六类指标 + 77 次真实实验存档 | 三真实数据集 + 合成关联序列；漂移检测 **AUC=1.0**（副产品：通信成本作免费健康信号） |
 
-## 运行与验证
+## 🚀 运行与验证
 
 项目初期在大赛指定 openEuler 环境对应的 Docker 容器中完成基础编译、运行与测试；项目后期迁移至安装 **openEuler 24.03-LTS-SP3** 的真实服务器，并在原生操作系统环境中重新完成编译、运行和测试。
 
@@ -148,6 +166,7 @@ VECTORENGINE_API_KEY=<your-key>
 uv run synapse probe --config configs/vectorengine.yaml
 ```
 
+> [!NOTE]
 > 两份配置：`configs/default.yaml`（离线 mock，hash embedder）用于机制自检；`configs/vectorengine.yaml`（真实 LLM `qwen3-235b-a22b-instruct-2507` + 句向量 `text-embedding-3-small`）用于真实评测。所有命令均支持 `--config` 覆盖。
 
 ### ③ 真实数据集评测
@@ -193,7 +212,7 @@ docker build -t synapse:latest .
 docker run --rm synapse:latest
 ```
 
-## 项目结构
+## 📁 项目结构
 
 ```
 src/synapse/
@@ -213,7 +232,7 @@ scripts/              fetch_coqa / fetch_hotpot / fetch_musique（数据集）/ 
 tests/                test_smoke / test_qa
 ```
 
-## 交付材料
+## 📦 交付材料
 
 除本仓库源码外，下列材料随提交一并交付（对应赛题交付要求）：
 
@@ -228,7 +247,7 @@ tests/                test_smoke / test_qa
 ---
 
 <p align="center">
-  <strong>SYNAPSE</strong> · Coordination as Compression
+  <strong>SYNAPSE</strong> · <em>Coordination as Compression</em>
   <br>
-  <sub>让经验进入通信回路，让协作真正拥有记忆。</sub>
+  <sub>让一次协作，成为下一次的边信息。</sub>
 </p>
