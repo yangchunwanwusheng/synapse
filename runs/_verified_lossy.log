@@ -1,2 +1,0 @@
-== VERIFIED-LOSSY warmup=4 n=12 backend=paratera thr=0.97 ==
-[verified_lossy] synced cos=0.9701 fallback=0.0 | mild-desync cos=0.9108 detected=0.75 | severe-desync cos=0.355 detected=1.0 | silent-corruption severe w/checksum=0 vs w/o=16 -> runs\verified_lossy_20260622_180609

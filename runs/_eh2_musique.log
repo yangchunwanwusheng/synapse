@@ -1,5 +1,0 @@
-== k-sweep: data=musique N=200 ks=[3, 4] retrieval=bridge model=Qwen3-30B-A3B-Instruct-2507 ==
-text baseline: F1=0.3776 tokens=482387
-  k=3: token -82.5% | gold_recall 0.725 | synF1 0.3743 | dF1 -0.003 CI[-0.059, 0.0546] | WORSE | w/t/l 42/106/52
-  k=4: token -77.5% | gold_recall 0.767 | synF1 0.366 | dF1 -0.012 CI[-0.0649, 0.0417] | WORSE | w/t/l 41/109/50
-  artifacts -> runs\musique_ksweep_20260622_115337\result.json

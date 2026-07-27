@@ -10,16 +10,41 @@ __pycache__/
 *.py[cod]
 *.egg-info/
 .venv/
+.venv-*/
 .uv/
 build/
 dist/
 
-# 运行产物：全部纳入（私有仓库，团队共享完整实验记录）
-# *.log  与 runs/  均提交
+# 运行产物
+runs/
+dashboard/
+*.log
 
-# 论文与科研内容（私有仓库，团队共享）：
-# SYNAPSE.tex/.pdf/.drawio、00-project.yaml、_state/、01-idea/、02-design/、04-analysis/、.claude/
-# 均纳入版本控制。
+# 研究过程与非本轮提交材料（仅保留在本地）
+.claude/
+.zcode/
+_state/
+01-idea/
+02-design/
+04-analysis/
+docs/
+00-project.yaml
+SYNAPSE.pdf
+SYNAPSE.tex
+SYNAPSE_architecture.drawio
+竞赛赛题.md
+
+# 演示、录制与论文图表脚本（非核心源码）
+scripts/_gen_demo_data.py
+scripts/demo_*.py
+scripts/demo_*.sh
+scripts/plot_*.py
+scripts/render_*.py
+scripts/replay_*.py
+
+# README 架构图仅提交内嵌 draw.io 源数据的 PNG
+assets/architecture.drawio
+assets/architecture.drawio.svg
 
 # LaTeX 中间件
 *.aux
@@ -34,9 +59,5 @@ dist/
 .DS_Store
 Thumbs.db
 
-# Temporary pilot debug logs (formal results in runs/<command>_<timestamp>/result.json)
-runs/_p0*
-
 # 外部论文复现代码（不入主仓）
 external/
-

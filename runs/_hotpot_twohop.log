@@ -1,7 +1,0 @@
-== k-sweep: N=50 ks=[3, 4, 5, 6] retrieval=twohop model=Qwen3-30B-A3B-Instruct-2507 ==
-text baseline: F1=0.7047 tokens=81356
-  k=3: token -72.2% | gold_recall 0.75 | synF1 0.5832 | dF1 -0.121 CI[-0.2381, -0.0029] | WORSE | w/t/l 3/35/12
-  k=4: token -63.1% | gold_recall 0.85 | synF1 0.6358 | dF1 -0.069 CI[-0.1882, 0.0497] | WORSE | w/t/l 5/35/10
-  k=5: token -54.2% | gold_recall 0.86 | synF1 0.6329 | dF1 -0.072 CI[-0.1761, 0.0354] | WORSE | w/t/l 4/36/10
-  k=6: token -43.9% | gold_recall 0.9 | synF1 0.6336 | dF1 -0.071 CI[-0.1754, 0.0317] | WORSE | w/t/l 3/37/10
-  artifacts -> runs\hotpot_ksweep_20260621_185254\result.json
