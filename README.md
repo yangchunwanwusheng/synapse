@@ -98,6 +98,8 @@ uv run pytest -q
 
 镜像基于 `openeuler/openeuler:24.03-lts`，默认执行无需网络和密钥的离线自检。
 
+项目环境验证分为两个阶段：项目初期在大赛指定 openEuler 环境对应的 Docker 容器中完成基础编译、运行与测试；项目后期迁移至安装 **openEuler 24.03-LTS-SP3** 的真实服务器，并在原生操作系统环境中重新完成编译、运行和测试。
+
 ```bash
 docker build -t synapse:latest .
 docker run --rm synapse:latest
