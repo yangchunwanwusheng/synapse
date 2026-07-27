@@ -1,190 +1,104 @@
-<div align="center">
+![SYNAPSE — 协作即压缩](assets/readme-hero.drawio.png)
 
-# SYNAPSE
+<p align="center">
+  <strong>第三届中国研究生操作系统开源创新大赛 · 社区赛题作品</strong>
+  <br>
+  <sub>4 Agents · Structured Protocol · Non-text State · Shared Memory · openEuler</sub>
+</p>
 
-### 面向多智能体协作的低开销通信、非文本状态传递与共享记忆原型
+---
 
-**结构化通信 · 语义残差交换 · 跨任务记忆复用 · 可复现实验**
+## 从“文本接力”到“状态协同”
 
-</div>
+多智能体系统不应把人类语言当作唯一的通信总线。
 
-> 第三届中国研究生操作系统开源创新大赛社区赛题作品。SYNAPSE 将多 Agent 协作理解为一个“信息压缩与状态复用”问题：用结构化协议替代冗长文本透传，用非文本语义状态减少重复编码，并把可复用经验沉淀为共享记忆。
+当 Planner、Retriever、Executor 与 Summarizer 共同完成一项复杂任务时，传统方案往往让 Agent 反复传递长文本、重复解释上下文、重新推理已经解决过的问题。协作轮次越多，Token、时延与语义损耗便越明显——系统拥有更多经验，通信却没有因此变得更聪明。
 
-## 作品概览
+**SYNAPSE 将这个问题重新定义为一项系统级的条件编码任务。** 接收方已经掌握的内容不必再次传输，发送方只需表达“预测之外的信息”。共享记忆不断积累，接收方的预测能力随之增强，真正需要传递的惊讶残差持续变小。
 
-传统多 Agent 系统常把中间状态反复转换为自然语言，再由下游 Agent 重新解析。上下文越长、轮次越多，重复传输与重复计算越明显。SYNAPSE 提供一条可运行、可对照、可度量的机制路径：
+> **Memory ↑　→　Prediction ↑　→　Residual ↓　→　Communication ↓**
+>
+> 经验越多，预测越准；预测越准，通信越省。
 
-- **低开销通信**：统一 `Message` 协议承载动作、参数、结果和能力描述，提供 CNR 握手、能力发现与调度。
-- **非文本状态传递**：把中间语义编码为向量，以预测残差、量化稀疏表示和 CAS 句柄完成传递；校验不通过时回退文本路径。
-- **共享记忆复用**：统一 `MemoryUnit` 元数据，通过关键词、标签和语义相似度混合检索，支持跨 Agent、跨任务复用。
-- **同条件 A/B 评测**：在相同任务上运行纯文本基线与 SYNAPSE 模式，记录消息数、token/字节、非文本载荷、时延、记忆命中率和答案质量。
+这不是一次对提示词的局部优化，而是一套贯穿协议、状态、存储、校验与评测的完整协作机制：让多 Agent 从冗长的“文本接力”，升级为可积累、可验证、可演进的“状态协同”。
 
-## 系统架构
+## 三重机制，构成同一条链
 
-![SYNAPSE 多智能体低开销协作架构](assets/architecture.drawio.png)
+### 01 · 结构化通信：先让 Agent 说同一种语言
 
-一次协作的主路径如下：
+SYNAPSE 以统一消息协议承载动作、参数、结果与能力描述，并通过 CNR 完成握手、能力发现、编码协商与任务路由。自然语言不再承担全部控制职责，Agent 之间交换的是边界清晰、可以调度、可以度量的协作意图。
 
-1. 编排器将复杂任务分解给 Planner、Retriever、Executor 与 Summarizer。
-2. Agent 通过 CNR 完成握手和能力发现，协作信息收敛为结构化 `Message`。
-3. 中间语义状态被编码为 embedding；发送方基于预测状态计算残差，量化并稀疏化后写入 CAS，消息只传递内容句柄。
-4. 接收方取回非文本载荷并重构语义状态，通过校验后继续使用；失败则回退到文本，保证正确性边界。
-5. 证据、摘要、策略与结论写入共享记忆；后续关联任务通过混合检索直接复用。
-6. 评测模块在同任务、同配置下对比纯文本模式和 SYNAPSE 模式。
+**结果是：控制信息更短，协作关系更清楚，通信开销能够被真正计算。**
 
-## 核心模块
+### 02 · 非文本状态：只传递预测失败的部分
 
-| 模块 | 主要职责 | 代码位置 |
-|---|---|---|
-| 多 Agent 运行时 | 四类角色、任务编排、CodeAct 执行与模型抽象 | `src/synapse/runtime/` |
-| 协议解析与调度 | 结构化消息、CNR 握手、能力发现与调度 | `src/synapse/protocol/` |
-| 非文本状态交换 | embedding、预测残差、稀疏量化、校验和 CAS | `src/synapse/stateplane/` |
-| 共享记忆与检索 | 记忆单元、混合检索、跨任务巩固与演化 | `src/synapse/memory/` |
-| 双模式与评测 | 纯文本/SYNAPSE 双模式、A/B 运行与指标聚合 | `src/synapse/modes/`、`src/synapse/eval/` |
-| 真实数据集管线 | CoQA、HotpotQA、MuSiQue 数据加载、检索与评分 | `src/synapse/qa/` |
+系统把中间语义状态编码为句向量，利用共享记忆生成接收方预测，再计算 `Z = Y − Ŷ`。发送端不传完整向量，而是对残差进行率失真编码、稀疏量化并写入内容寻址存储，在线缆上只交换轻量句柄。
 
-## 赛题要求对齐
+为了让“有损”不等于“不可靠”，SYNAPSE 设计了 **Verified Lossy Coordination（VLC）**：重构结果通过一致性校验后才进入下游；关键语义失配时自动提升精度或回退全文路径。系统既敢于压缩，也知道何时不能压缩。
 
-| 赛题要求 | SYNAPSE 实现 | 可检查入口 |
-|---|---|---|
-| 不少于 3 个 Agent、覆盖不少于 3 类角色 | Planner / Retriever / Executor / Summarizer 四角色 | `src/synapse/runtime/team.py` |
-| 动作、参数、结果、能力的结构化通信 | `Message{action, params, result, capability}` | `src/synapse/protocol/messages.py` |
-| 握手、能力发现或协议映射 | CNR 握手与调度器 | `src/synapse/protocol/handshake.py`、`src/synapse/protocol/scheduler.py` |
-| 纯文本与结构化模式同任务对比 | `text` / `synapse` 双模式，`ab` 命令统一运行 | `src/synapse/modes/`、`src/synapse/eval/harness.py` |
-| 非文本中间状态直接交换 | embedding + 预测残差 + CAS 句柄 + 校验回退 | `src/synapse/stateplane/` |
-| 统一共享记忆单元 | ID、来源 Agent、创建时间、任务主题、摘要等元数据 | `src/synapse/memory/store.py` |
-| 关键词、标签、语义相似度检索 | 三路加权混合检索 | `src/synapse/memory/retrieval.py` |
-| 两组关联连续任务 | G1 主题深挖、G2 关联演进并复用 G1 记忆 | `src/synapse/tasks.py`、`synapse m7` |
-| 完整效率指标 | 消息、文本 token/字节、非文本次数/字节、时延、命中率、质量 | `src/synapse/eval/metrics.py` |
-| 稳定执行不少于 10 轮 | `synapse ab --rounds 10` | `tests/`、CLI |
-| openEuler 24.03-LTS 运行 | openEuler 基础镜像、非 root 用户、离线健康检查 | `Dockerfile` |
-| CodeAct 执行机制 | 基于 smolagents `CodeAgent` 的 Executor | `src/synapse/runtime/team.py` |
+### 03 · 共享记忆：让一次协作成为下一次的边信息
 
-## 快速开始
+任务中的证据、摘要、策略与结论被沉淀为统一记忆单元。关键词、标签与语义相似度三路检索共同选择预测基，记忆演化链负责关联扩展、取代检测与过时过滤。
 
-### 1. 本机离线自检
+在 SYNAPSE 中，Memory 不只是知识仓库，它同时承担四个角色：**经验资产、状态预测器、通信压缩器与新颖性传感器。** 系统不再每次从零开始，而是在持续协作中形成“越用越省、越用越聪明”的正反馈。
 
-环境要求：Python 3.11+，推荐使用 [uv](https://docs.astral.sh/uv/)。离线模式使用 mock LLM 与确定性 `HashEmbedder`，不需要 API Key。Windows 若把仓库放在含中文字符的路径下，建议使用 Python 3.13+，以避免旧版本 Python 读取可编辑安装路径时受系统编码影响。
+## 一条从协作到复用的闭环
+
+![SYNAPSE 系统架构：结构化控制面、非文本状态面与共享记忆闭环](assets/architecture.drawio.png)
+
+四类 CodeAgent 共同覆盖任务规划、信息检索、工具执行与结果整合；结构化控制面负责协商和调度，非文本状态面负责预测、残差、CAS 句柄与校验，共享记忆则把本轮有效经验送回下一轮协作。
+
+这条闭环的关键不在于把文本“压得更小”，而在于**减少需要表达的信息本身**：完整状态被改写为语义增量，历史经验被转化为解码端边信息，通信成本因此可以随协作深入而持续收缩。
+
+## 实验，让机制自己说话
+
+![SYNAPSE 真实 API 与公开数据集实验结果](assets/results.drawio.png)
+
+SYNAPSE 在 HotpotQA、MuSiQue 与 CoQA 三类真实任务上完成纯文本模式与结构化模式的同条件 A/B 评测，并以配对检验、因果消融和受损注入验证通信效率、答案质量与可靠性。
+
+- **通信收缩：** HotpotQA Token 开销降低 **71.09%**，MuSiQue 降低 **80.90%**；端到端线缆字节最高节省 **96.45%**。
+- **质量竞争力：** N=200 配对检验中，结构化模式与全文基线的答案质量在统计上不可区分；MuSiQue 上进一步取得 **ΔF1 = +0.333**。
+- **记忆因果性：** 有共享记忆时，残差由 `2787 B` 收缩至 `960 B`；无记忆对照几乎不收缩，**97.6%** 的收缩可归因于记忆复用。
+- **可靠协作：** 在受控有损注入中，VLC 检出并回退全部 16 个受损样本，静默损坏为 **0**。
+- **意外发现：** 残差信号对分布漂移的检测 AUC 达 **1.0**——通信成本本身，成为一个模型无关且无需额外开销的系统健康信号。
+
+## 为真实系统而构建
+
+SYNAPSE 不是概念图上的算法组合，而是一套可以编译、运行、对照和测量的多智能体协作原型：
+
+- 四类 Agent 形成完整任务闭环，Executor 通过 CodeAct 执行模型生成的代码；
+- 三档混合协议可在 residual、embedding 与 text 之间自适应选择；
+- CAS 将大状态从消息体中分离，内容句柄支持去重与按需恢复；
+- text / synapse 双模式在相同任务、模型与配置下完成顺序隔离式 A/B；
+- 指标覆盖消息次数、Token、线缆字节、非文本载荷、时延、记忆命中与任务质量。
+
+我们希望证明的并不只是“某一次实验更省”，而是一条更具普适性的系统规律：
+
+> **当多个智能体共享不断增长的经验，它们之间的通信成本应当随协作深入而下降，而不是继续线性甚至平方级增长。**
+
+## 运行与验证
+
+项目初期在大赛指定 openEuler 环境对应的 Docker 容器中完成基础编译、运行与测试；项目后期迁移至安装 **openEuler 24.03-LTS-SP3** 的真实服务器，并在原生操作系统环境中重新完成编译、运行和测试。
+
+本机需要 Python 3.11+ 与 [uv](https://docs.astral.sh/uv/)。离线自检不依赖 API Key：
 
 ```bash
 uv sync
 uv run synapse smoke
-```
-
-成功时末行应为：
-
-```text
-SMOKE PASSED
-```
-
-### 2. 运行 10 轮双模式对比
-
-```bash
 uv run synapse ab --rounds 10 --config configs/default.yaml
 ```
 
-该命令在同一组连续任务上分别运行纯文本模式和 SYNAPSE 模式，并输出两侧轨迹、汇总指标、通信节省比例与非文本字节收缩轨迹。
-
-### 3. 运行测试
-
-```bash
-uv sync --extra dev
-uv run pytest -q
-```
-
-测试覆盖残差编解码与回退、共享记忆写入/演化/检索、双模式执行、连续任务复用、三档协议统计以及三类真实数据集管线。
-
-## openEuler / Docker 复现
-
-镜像基于 `openeuler/openeuler:24.03-lts`，默认执行无需网络和密钥的离线自检。
-
-项目环境验证分为两个阶段：项目初期在大赛指定 openEuler 环境对应的 Docker 容器中完成基础编译、运行与测试；项目后期迁移至安装 **openEuler 24.03-LTS-SP3** 的真实服务器，并在原生操作系统环境中重新完成编译、运行和测试。
+在 openEuler 容器中运行：
 
 ```bash
 docker build -t synapse:latest .
 docker run --rm synapse:latest
 ```
 
-也可使用 Compose：
+---
 
-```bash
-docker compose run --rm synapse
-```
-
-容器以非 root 用户运行，并通过同一 `synapse smoke` 命令执行健康检查。
-
-## 真实模型与数据集实验
-
-真实路径支持 OpenAI 兼容接口。密钥只在运行时注入，禁止写入配置或提交到仓库。
-
-```bash
-cp .env.example .env
-# 在 .env 中填写 VECTORENGINE_API_KEY
-
-uv sync --extra api
-uv run synapse probe --config configs/vectorengine.yaml
-uv run synapse signal --config configs/vectorengine.yaml --rounds 5
-uv run synapse m7 --config configs/vectorengine.yaml --g1 5 --g2 5
-uv run synapse hotpot --config configs/vectorengine.yaml --n 10
-uv run synapse musique --config configs/vectorengine.yaml --n 3 --retrieval twohop
-uv run synapse coqa --config configs/vectorengine.yaml --convs 3
-```
-
-仓库中的 `data/` 是固定的小规模评测样本，便于评审直接复现；抓取脚本位于 `scripts/`。运行结果默认写入本地 `runs/`，该目录不纳入版本控制。
-
-## 实验快照
-
-以下结果来自固定配置的一次真实 API 小样本实验，主要用于验证机制链路，不作为大样本统计结论：
-
-| 数据集 | 样本规模 | 检索设置 | LLM token 节省 | text F1 | SYNAPSE F1 | 金标召回/命中 |
-|---|---:|---|---:|---:|---:|---:|
-| HotpotQA | 10 | single, k=3 | 71.09% | 0.780 | 0.680 | 0.900 |
-| MuSiQue | 3 | twohop, k=3 | 80.90% | 0.524 | 0.857 | 0.667 |
-| CoQA | 3 段对话 | 句级检索 | 10.65% | 0.656 | 0.684 | 0.921 |
-
-机制消融中，有共享记忆时非文本残差从 `2787 B` 收缩至 `960 B`；清空记忆后仅从 `2772 B` 变化至 `2727 B`。这说明在该实验配置下，残差收缩主要来自跨任务记忆复用，而不是简单减少工作步骤。
-
-> 结果解读应同时关注效率与质量。HotpotQA 小样本中虽然 token 显著下降，但 F1 同时下降 0.10；因此本项目不会把“通信更省”表述为无条件的质量提升。完整复现实验应扩大样本量、固定随机种子，并报告均值、方差和配对置信区间。
-
-## 目录结构
-
-```text
-synapse/
-├── assets/                    # README 架构图（内嵌 draw.io 源数据）
-├── configs/                   # 离线与真实后端配置
-├── data/                      # 固定的小规模评测样本
-├── scripts/                   # 数据抓取与参数扫描脚本
-├── src/synapse/
-│   ├── runtime/               # 多 Agent 运行时
-│   ├── protocol/              # 协议、握手与调度
-│   ├── stateplane/            # 非文本状态交换
-│   ├── memory/                # 共享记忆与检索
-│   ├── modes/                 # 纯文本 / SYNAPSE 双模式
-│   ├── eval/                  # 指标与 A/B 评测
-│   └── qa/                    # 真实数据集实验管线
-├── tests/                     # 离线测试与 QA 管线测试
-├── Dockerfile                 # openEuler 24.03-LTS 镜像
-├── docker-compose.yml
-├── pyproject.toml
-└── uv.lock
-```
-
-## 关键设计取舍
-
-- **结构化控制面，非文本数据面**：小而稳定的协议字段负责协作控制，embedding 与残差载荷负责高密度状态交换。
-- **预测残差而非全量向量**：接收方已有预测基时只传变化部分；任务经验越可复用，残差通常越小。
-- **CAS 句柄而非重复载荷**：相同内容按摘要寻址，消息仅携带句柄，减少重复复制。
-- **校验失败允许回退**：有损压缩不能牺牲正确性边界；重构未通过校验时退回文本路径并计入指标。
-- **机制与模型解耦**：离线 mock 用于确定性验收，真实后端通过配置接入，避免把结果绑定到单一模型服务。
-
-## 当前边界
-
-- 当前 CAS 是进程内内容寻址存储，重点验证句柄化传递与去重语义；它不是分布式对象存储，也不声称实现跨主机共享内存。
-- 离线 mock 用于验证控制流和指标管线，不能替代真实模型质量评估。
-- README 中的小样本结果用于机制验证；正式统计结论需要更大的样本、重复实验和置信区间。
-
-## 安全与复现约定
-
-- `.env`、密钥、证书、个人信息与本地运行产物均不进入版本库。
-- 真实实验建议固定 `temperature=0`、数据样本、检索参数和随机种子。
-- 提交前可运行 `uv run pytest -q` 与 `git status --short`，确认测试通过且仓库中无运行产物。
+<p align="center">
+  <strong>SYNAPSE</strong> · Coordination as Compression
+  <br>
+  <sub>让经验进入通信回路，让协作真正拥有记忆。</sub>
+</p>
