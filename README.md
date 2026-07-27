@@ -31,9 +31,15 @@
 
 **SYNAPSE 将这个问题重新定义为一项系统级的条件编码任务。** 接收方已经掌握的内容不必再次传输，发送方只需表达“预测之外的信息”。共享记忆不断积累，接收方的预测能力随之增强，真正需要传递的惊讶残差持续变小。
 
-> [!TIP]
-> **Memory ↑　→　Prediction ↑　→　Residual ↓　→　Communication ↓**
-> 经验越多，预测越准；预测越准，通信越省。
+<table>
+<tr><td width="6" bgcolor="#1F883D"></td>
+<td bgcolor="#E6F4EA">
+
+💡 **Memory ↑　→　Prediction ↑　→　Residual ↓　→　Communication ↓**
+<br>经验越多，预测越准；预测越准，通信越省。
+
+</td></tr>
+</table>
 
 这不是一次对提示词的局部优化，而是一套贯穿协议、状态、存储、校验与评测的完整协作机制：让多 Agent 从冗长的“文本接力”，升级为可积累、可验证、可演进的“状态协同”。
 
@@ -97,8 +103,14 @@ SYNAPSE 不是概念图上的算法组合，而是一套可以编译、运行、
 
 我们希望证明的并不只是“某一次实验更省”，而是一条更具普适性的系统规律：
 
-> [!IMPORTANT]
-> **当多个智能体共享不断增长的经验，它们之间的通信成本应当随协作深入而下降，而不是继续线性甚至平方级增长。**
+<table>
+<tr><td width="6" bgcolor="#8250DF"></td>
+<td bgcolor="#F5E8FC">
+
+📌 **当多个智能体共享不断增长的经验，它们之间的通信成本应当随协作深入而下降，而不是继续线性甚至平方级增长。**
+
+</td></tr>
+</table>
 
 ## 🎯 破局定位：与主流方案对比
 
@@ -113,8 +125,14 @@ SYNAPSE 不是概念图上的算法组合，而是一套可以编译、运行、
 | 跨任务复用 | **有** ✅（共享记忆 + 演化链） | 无 ❌ | 无 ❌ | 无 ❌ |
 | 传输量随经验 | **递减** 🟢（记忆→预测→残差稀疏） | 不变 ➖ | 不变 ➖ | 不变 ➖ |
 
-> [!TIP]
-> 句向量残差路线恰好填补了潜空间通信的空白区——不要求访问模型内部隐状态，又保留了非文本状态传递的效率优势。这是 latent 通信在商用闭源 API 时代的务实落地。
+<table>
+<tr><td width="6" bgcolor="#1F883D"></td>
+<td bgcolor="#E6F4EA">
+
+💡 句向量残差路线恰好填补了潜空间通信的空白区——不要求访问模型内部隐状态，又保留了非文本状态传递的效率优势。这是 latent 通信在商用闭源 API 时代的务实落地。
+
+</td></tr>
+</table>
 
 ## 📋 赛题维度对照
 
@@ -166,8 +184,14 @@ VECTORENGINE_API_KEY=<your-key>
 uv run synapse probe --config configs/vectorengine.yaml
 ```
 
-> [!NOTE]
-> 两份配置：`configs/default.yaml`（离线 mock，hash embedder）用于机制自检；`configs/vectorengine.yaml`（真实 LLM `qwen3-235b-a22b-instruct-2507` + 句向量 `text-embedding-3-small`）用于真实评测。所有命令均支持 `--config` 覆盖。
+<table>
+<tr><td width="6" bgcolor="#0969DA"></td>
+<td bgcolor="#E8F1FC">
+
+ℹ️ 两份配置：`configs/default.yaml`（离线 mock，hash embedder）用于机制自检；`configs/vectorengine.yaml`（真实 LLM `qwen3-235b-a22b-instruct-2507` + 句向量 `text-embedding-3-small`）用于真实评测。所有命令均支持 `--config` 覆盖。
+
+</td></tr>
+</table>
 
 ### ③ 真实数据集评测
 
