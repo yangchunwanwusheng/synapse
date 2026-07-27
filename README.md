@@ -26,7 +26,7 @@
 
 ### 01 · 结构化通信：先让 Agent 说同一种语言
 
-SYNAPSE 以统一消息协议承载动作、参数、结果与能力描述，并通过 CNR 完成握手、能力发现、编码协商与任务路由。自然语言不再承担全部控制职责，Agent 之间交换的是边界清晰、可以调度、可以度量的协作意图。
+SYNAPSE 以统一消息协议承载动作、参数、结果与能力描述，并通过 CNR（Capability Negotiation & Resolution）完成握手、能力发现、编码协商与任务路由，可与业界 A2A Agent Card 标准做协议映射。自然语言不再承担全部控制职责，Agent 之间交换的是边界清晰、可以调度、可以度量的协作意图。
 
 **结果是：控制信息更短，协作关系更清楚，通信开销能够被真正计算。**
 
@@ -61,7 +61,7 @@ SYNAPSE 以统一消息协议承载动作、参数、结果与能力描述，并
 
 ![SYNAPSE 真实 API 与公开数据集实验结果](assets/results.drawio.png)
 
-SYNAPSE 在 HotpotQA、MuSiQue 与 CoQA 三类真实任务上完成纯文本模式与结构化模式的同条件 A/B 评测，并以配对检验、因果消融和受损注入验证通信效率、答案质量与可靠性。
+SYNAPSE 在 HotpotQA、MuSiQue 与 CoQA 三类真实任务上完成纯文本模式与结构化模式的同条件 A/B 评测，并以配对检验、因果消融和受损注入验证通信效率、答案质量与可靠性。实验设计包含**不少于 2 组关联性连续任务**：HotpotQA（bridge 型并行多跳）与 MuSiQue（链式 two-hop 多跳）构成第一组多跳结构对照，CoQA（38 轮长对话）与合成 G1→G2 演进序列构成第二组长程关联对照，覆盖赛题对关联任务验证的要求。
 
 - **通信收缩：** HotpotQA Token 开销降低 **71.09%**、MuSiQue 降低 **80.90%**；端到端线缆字节节省 HotpotQA **94.64%**、MuSiQue **96.45%**（接近一个数量级）。
 - **质量竞争力：** HotpotQA 上 N=200 配对检验中，结构化模式与全文基线的答案质量在统计上不可区分（95% CI 含 0）；MuSiQue 上进一步取得 **ΔF1 = +0.333**。
@@ -212,6 +212,18 @@ configs/              default.yaml（离线 mock）/ vectorengine.yaml（真实 
 scripts/              fetch_coqa / fetch_hotpot / fetch_musique（数据集）/ sweep_hotpot_k（k-前沿）
 tests/                test_smoke / test_qa
 ```
+
+## 交付材料
+
+除本仓库源码外，下列材料随提交一并交付（对应赛题交付要求）：
+
+| 材料 | 文件 | 说明 |
+| --- | --- | --- |
+| 系统设计文档 | `SYNAPSE项目说明书.docx` | 六章完整文档：理论建模、五模块设计、实验、实现难点、赛题维度对照 |
+| 实验报告 | 说明书 §4 + `runs/*.json` | 三数据集实验数据与 77 次真实实验原始存档，可溯源复验 |
+| 部署文档 | 本 README「运行与验证」+ `Dockerfile` | openEuler 24.03-LTS-SP3 容器一键编译运行 |
+| 演示视频 | `SYNAPSE演示视频.mp4` | 系统运行与实验过程演示 |
+| 作品介绍 | `SYNAPSE作品介绍PPT.pptx` | 评审速览 |
 
 ---
 
