@@ -1,0 +1,400 @@
+[
+ {
+  "id": "coqa-0",
+  "source": "mctest",
+  "story": "Once upon a time, in a barn near a farm house, there lived a little white kitten named Cotton. Cotton lived high up in a nice warm place above the barn where all of the farmer's horses slept. But Cotton wasn't alone in her little home above the barn, oh no. She shared her hay bed with her mommy and 5 other sisters. All of her sisters were cute and fluffy, like Cotton. But she was the only white one in the bunch. The rest of her sisters were all orange with beautiful white tiger stripes like Cotton's mommy. Being different made Cotton quite sad. She often wished she looked like the rest of her family. So one day, when Cotton found a can of the old farmer's orange paint, she used it to paint herself like them. When her mommy and sisters found her they started laughing. \n\n\"What are you doing, Cotton?!\" \n\n\"I only wanted to be more like you\". \n\nCotton's mommy rubbed her face on Cotton's and said \"Oh Cotton, but your fur is so pretty and special, like you. We would never want you to be any other way\". And with that, Cotton's mommy picked her up and dropped her into a big bucket of water. When Cotton came out she was herself again. Her sisters licked her face until Cotton's fur was all all dry. \n\n\"Don't ever do that again, Cotton!\" they all cried. \"Next time you might mess up that pretty white fur of yours and we wouldn't want that!\" \n\nThen Cotton thought, \"I change my mind. I like being special\".",
+  "turns": [
+   {
+    "q": "What color was Cotton?",
+    "a": "white"
+   },
+   {
+    "q": "Where did she live?",
+    "a": "in a barn"
+   },
+   {
+    "q": "Did she live alone?",
+    "a": "no"
+   },
+   {
+    "q": "Who did she live with?",
+    "a": "with her mommy and 5 sisters"
+   },
+   {
+    "q": "What color were her sisters?",
+    "a": "orange and white"
+   },
+   {
+    "q": "Was Cotton happy that she looked different than the rest of her family?",
+    "a": "no"
+   },
+   {
+    "q": "What did she do to try to make herself the same color as her sisters?",
+    "a": "she painted herself"
+   },
+   {
+    "q": "Whose paint was it?",
+    "a": "the farmer"
+   },
+   {
+    "q": "What did Cotton's mother and siblings do when they saw her painted orange?",
+    "a": "they started laughing"
+   },
+   {
+    "q": "Where did Cotton's mother put her to clean the paint off?",
+    "a": "a bucket of water"
+   },
+   {
+    "q": "What did the other cats do when Cotton emerged from the bucket of water?",
+    "a": "licked her face"
+   },
+   {
+    "q": "Did they want Cotton to change the color of her fur?",
+    "a": "no"
+   }
+  ]
+ },
+ {
+  "id": "coqa-1",
+  "source": "mctest",
+  "story": "Once there was a beautiful fish named Asta. Asta lived in the ocean. There were lots of other fish in the ocean where Asta lived. They played all day long. \n\nOne day, a bottle floated by over the heads of Asta and his friends. They looked up and saw the bottle. \"What is it?\" said Asta's friend Sharkie. \"It looks like a bird's belly,\" said Asta. But when they swam closer, it was not a bird's belly. It was hard and clear, and there was something inside it. \n\nThe bottle floated above them. They wanted to open it. They wanted to see what was inside. So they caught the bottle and carried it down to the bottom of the ocean. They cracked it open on a rock. When they got it open, they found what was inside. It was a note. The note was written in orange crayon on white paper. Asta could not read the note. Sharkie could not read the note. They took the note to Asta's papa. \"What does it say?\" they asked. \n\nAsta's papa read the note. He told Asta and Sharkie, \"This note is from a little girl. She wants to be your friend. If you want to be her friend, we can write a note to her. But you have to find another bottle so we can send it to her.\" And that is what they did.",
+  "turns": [
+   {
+    "q": "what was the name of the fish",
+    "a": "Asta."
+   },
+   {
+    "q": "What looked like a birds belly",
+    "a": "a bottle"
+   },
+   {
+    "q": "who said that",
+    "a": "Asta."
+   },
+   {
+    "q": "Was Sharkie a friend?",
+    "a": "Yes"
+   },
+   {
+    "q": "did they get the bottle?",
+    "a": "Yes"
+   },
+   {
+    "q": "What was in it",
+    "a": "a note"
+   },
+   {
+    "q": "Did a little boy write the note",
+    "a": "No"
+   },
+   {
+    "q": "Who could read the note",
+    "a": "Asta's papa"
+   },
+   {
+    "q": "What did they do with the note",
+    "a": "unknown"
+   },
+   {
+    "q": "did they write back",
+    "a": "yes"
+   },
+   {
+    "q": "were they excited",
+    "a": "unknown"
+   }
+  ]
+ },
+ {
+  "id": "coqa-2",
+  "source": "race",
+  "story": "My doorbell rings. On the step, I find the elderly Chinese lady, small and slight, holding the hand of a little boy. In her other hand, she holds a paper carrier bag. \n\nI know this lady. It is not her first visit. She is the boy's grandmother, and her daughter bought the house next door last October. \n\nHer daughter, Nicole, speaks fluent English. But she is now in Shanghai, and her parents are here with the little boy. Nicole has obviously told her mother that I am having heart surgery soon, so her mother has decided I need more nutrients. \n\nI know what is inside the bag--a thermos with hot soup and a stainless-steel container with rice, vegetables and either chicken, meat or shrimp, sometimes with a kind of pancake. This has become an almost-daily practice. \n\nCommunication between us is somewhat affected by the fact that she doesn't speak English and all I can say in Chinese is hello. Once, she brought an iPad as well as the food. She pointed to the screen, which displayed a message from her daughter telling me that her mother wanted to know if the food was all right and whether it was too salty. I am not used to iPads, so she indicated I should go with her to her house. Then, she handed the iPad to her husband and almost immediately I found myself looking at Nicole in Shanghai and discussing her mother's cooking and salt intake. Instantly, tears welled in my eyes. \n\n\"Your mother just can't be bringing me meals like this all the time,\" I insisted. \"I can hardly do dishes in return.\" \n\n\"Oh, no, Lucy.\" Nicole said. \"Mum doesn't like western food. Don't worry about it; she has to cook for the three of them anyway, and she wants to do it.\" \n\nThe doorbell keeps ringing and there is the familiar brown paper carrier bag, handed smilingly to me. \n\nI am now working on some more Chinese words--it's the least I can do after such display of kindness. \n\n\"Thank you\" is, of course, the first one. Somehow, it seems inadequate.",
+  "turns": [
+   {
+    "q": "Who is at the door?",
+    "a": "An elderly Chinese lady and a little boy"
+   },
+   {
+    "q": "Is she carrying something?",
+    "a": "Yes"
+   },
+   {
+    "q": "What?",
+    "a": "a paper carrier bag"
+   },
+   {
+    "q": "Do I know her?",
+    "a": "Yes"
+   },
+   {
+    "q": "Who is her daughter?",
+    "a": "Nicole"
+   },
+   {
+    "q": "Where does Nicole live?",
+    "a": "Shanghai"
+   },
+   {
+    "q": "How is she related to the boy?",
+    "a": "mother"
+   },
+   {
+    "q": "What is in the bag?",
+    "a": "food"
+   },
+   {
+    "q": "Has she done this before?",
+    "a": "Yes"
+   },
+   {
+    "q": "Why?",
+    "a": "I am having heart surgery soon, so her mother has decided I need more nutrients"
+   },
+   {
+    "q": "What has helped us communicate?",
+    "a": "an iPad"
+   },
+   {
+    "q": "What kind of dishes does she bring?",
+    "a": "hot soup and a container with rice, vegetables and either chicken, meat or shrimp, sometimes with a kind of pancake"
+   },
+   {
+    "q": "What do I do to help communicate with her?",
+    "a": "I am now working on some more Chinese words"
+   },
+   {
+    "q": "Do she continue bringing the bag?",
+    "a": "Yes"
+   },
+   {
+    "q": "What is the first phrase I learn?",
+    "a": "\"Thank you\""
+   }
+  ]
+ },
+ {
+  "id": "coqa-3",
+  "source": "cnn",
+  "story": "(CNN) -- Dennis Farina, the dapper, mustachioed cop-turned-actor best known for his tough-as-nails work in such TV series as \"Law & Order,\" \"Crime Story,\" and \"Miami Vice,\" has died. He was 69. \n\n\"We are deeply saddened by the loss of a great actor and a wonderful man,\" said his publicist, Lori De Waal, in a statement Monday. \"Dennis Farina was always warmhearted and professional, with a great sense of humor and passion for his profession. He will be greatly missed by his family, friends and colleagues.\" \n\nFarina, who had a long career as a police officer in Chicago, got into acting through director Michael Mann, who used him as a consultant and cast him in his 1981 movie, \"Thief.\" That role led to others in such Mann-created shows as \"Miami Vice\" (in which Farina played a mobster) and \"Crime Story\" (in which he starred as Lt. Mike Torello). \n\nFarina also had roles, generally as either cops or gangsters, in a number of movies, including \"Midnight Run\" (1988), \"Get Shorty\" (1995), \"The Mod Squad\" (1999) and \"Snatch\" (2000). \n\nIn 2004, he joined the cast of the long-running \"Law & Order\" after Jerry Orbach's departure, playing Detective Joe Fontana, a role he reprised on the spinoff \"Trial by Jury.\" Fontana was known for flashy clothes and an expensive car, a distinct counterpoint to Orbach's rumpled Lennie Briscoe. \n\nFarina was on \"Law & Order\" for two years, partnered with Jesse L. Martin's Ed Green. Martin's character became a senior detective after Farina left the show. ",
+  "turns": [
+   {
+    "q": "Is someone in showbiz?",
+    "a": "Yes."
+   },
+   {
+    "q": "Whom?",
+    "a": "Dennis Farina"
+   },
+   {
+    "q": "What did he do?",
+    "a": "Actor"
+   },
+   {
+    "q": "Is he still alive?",
+    "a": "No"
+   },
+   {
+    "q": "Was he in movies?",
+    "a": "Yes"
+   },
+   {
+    "q": "Anything recent?",
+    "a": "No"
+   },
+   {
+    "q": "What happened in the early 80's?",
+    "a": "Farina was cast in a film"
+   },
+   {
+    "q": "Who cast him?",
+    "a": "Michael Mann"
+   },
+   {
+    "q": "What was the title of the movie?",
+    "a": "\"Thief\""
+   },
+   {
+    "q": "What parts did he usually get?",
+    "a": "cops or gangsters"
+   },
+   {
+    "q": "What happened in 2004?",
+    "a": "He joined a TV show cast."
+   },
+   {
+    "q": "Which one?",
+    "a": "\"Law & Order\""
+   },
+   {
+    "q": "Who did he portray?",
+    "a": "Detective Joe Fontana"
+   },
+   {
+    "q": "Did he have a beater for a car?",
+    "a": "No"
+   },
+   {
+    "q": "What did he have?",
+    "a": "An expensive car"
+   },
+   {
+    "q": "Were the characters clothes frumpy?",
+    "a": "No"
+   },
+   {
+    "q": "What were they like?",
+    "a": "Flashy"
+   },
+   {
+    "q": "Was he on the show for five years?",
+    "a": "No"
+   },
+   {
+    "q": "Was he always an actor?",
+    "a": "No"
+   },
+   {
+    "q": "What had he been before?",
+    "a": "A cop"
+   }
+  ]
+ },
+ {
+  "id": "coqa-4",
+  "source": "mctest",
+  "story": "Kendra and Quinton travel to and from school every day. Kendra lives further from the bus stop than Quinton does, stops every morning at Quinton's house to join him to walk to the bus stop. Every afternoon, after school, when walking home from the bus stop they go in for cookies and milk that Quinton's mother has ready and waiting for them. Quinton can't eat cheese or cake so they had the same snack every day. They both work together on their homework and when they are done they play together. Kendra always makes sure to leave in time to get home for dinner. She doesn't want to miss story time which was right before bedtime. \n\nOne morning Kendra walked up to Quinton's house, she thought something might be wrong because normally Quinton was waiting outside for her and on this morning he was not to be found. Kendra went up to the door and knocked. She waited and waited and yet no one answered. She saw that Quinton's mother's car wasn't in their driveway which was weird. She waited for a few bit looking up and down the block and getting worried when Quinton was nowhere to be found. \n\nKendra didn't want to miss the bus to school and hurried off to make it in time. The bus driver saw that she was upset and that Quinton was not with her that morning. She told him what happened and he said that he was sure that everything would be okay. \n\nKendra got to school, ran to her teacher and told him what happened that morning. The teacher smiled and told her not to worry, Quinton's mother had called and he was going to the dentist and would be at school after lunch and that she would see him at the bus stop like normal tomorrow.",
+  "turns": [
+   {
+    "q": "Where do Quinton and Kendra travel to and from every day?",
+    "a": "school"
+   },
+   {
+    "q": "Does Quinton live further from the bus stop?",
+    "a": "No"
+   },
+   {
+    "q": "What do they do every afternoon after school?",
+    "a": "go to Quentin's house"
+   },
+   {
+    "q": "Does Quinton eat cheese?",
+    "a": "No"
+   },
+   {
+    "q": "Do they play before their homework?",
+    "a": "No"
+   },
+   {
+    "q": "What does Kendra not want to miss?",
+    "a": "story time"
+   },
+   {
+    "q": "When is that?",
+    "a": "right before bedtime"
+   },
+   {
+    "q": "What happened when Kendra knocked on Quinton's door?",
+    "a": "no one answered"
+   },
+   {
+    "q": "Did she see the car?",
+    "a": "No"
+   },
+   {
+    "q": "Did she miss the bus?",
+    "a": "No"
+   },
+   {
+    "q": "What did the bus driver see?",
+    "a": "that she was upset"
+   },
+   {
+    "q": "Did Kendra tell him why?",
+    "a": "yes"
+   },
+   {
+    "q": "What did he say?",
+    "a": "everything would be okay"
+   },
+   {
+    "q": "When she got to school, who did she tell?",
+    "a": "her teacher"
+   },
+   {
+    "q": "Did he frown?",
+    "a": "No"
+   },
+   {
+    "q": "Who had called?",
+    "a": "Quinton's mother"
+   },
+   {
+    "q": "Where did he go?",
+    "a": "to the dentist"
+   },
+   {
+    "q": "When would he be back?",
+    "a": "yes"
+   }
+  ]
+ },
+ {
+  "id": "coqa-5",
+  "source": "wikipedia",
+  "story": "Staten Island is one of the five boroughs of New York City in the U.S. state of New York. In the southwest of the city, Staten Island is the southernmost part of both the city and state of New York, with Conference House Park at the southern tip of the island and the state. The borough is separated from New Jersey by the Arthur Kill and the Kill Van Kull, and from the rest of New York by New York Bay. With a 2016 Census-estimated population of 476,015, Staten Island is the least populated of the boroughs but is the third-largest in area at . Staten Island is the only borough of New York with a non-Hispanic White majority. The borough is coextensive with Richmond County, and until 1975 was the Borough of Richmond. Its flag was later changed to reflect this. Staten Island has been sometimes called \"the forgotten borough\" by inhabitants who feel neglected by the city government. \n\nThe North Shore—especially the neighborhoods of St. George, Tompkinsville, Clifton, and Stapleton—is the most urban part of the island; it contains the designated St. George Historic District and the St. Paul's Avenue-Stapleton Heights Historic District, which feature large Victorian houses. The East Shore is home to the F.D.R. Boardwalk, the fourth-longest in the world. The South Shore, site of the 17th-century Dutch and French Huguenot settlement, developed rapidly beginning in the 1960s and 1970s and is now mostly suburban in character. The West Shore is the least populated and most industrial part of the island.",
+  "turns": [
+   {
+    "q": "How many burroughs are there?",
+    "a": "five"
+   },
+   {
+    "q": "in what city?",
+    "a": "New York City"
+   },
+   {
+    "q": "and state?",
+    "a": "New York"
+   },
+   {
+    "q": "Is staten island one?",
+    "a": "Yes"
+   },
+   {
+    "q": "Where is it?",
+    "a": "In the southwest of the city"
+   },
+   {
+    "q": "What separates it from new jersey?",
+    "a": "Arthur Kill and the Kill Van Kull"
+   },
+   {
+    "q": "What is its population?",
+    "a": "476,015"
+   },
+   {
+    "q": "Is it the most populated?",
+    "a": "no"
+   },
+   {
+    "q": "what ethnicity is the majority?",
+    "a": "non-Hispanic White"
+   },
+   {
+    "q": "What is it sometimes called?",
+    "a": "the forgotten borough"
+   },
+   {
+    "q": "why?",
+    "a": "because the inhabitants feel neglected by the city government"
+   },
+   {
+    "q": "what is the most urban part?",
+    "a": "North Shore"
+   },
+   {
+    "q": "which neighborhoods?",
+    "a": "St. George, Tompkinsville, Clifton, and Stapleton"
+   }
+  ]
+ }
+]
