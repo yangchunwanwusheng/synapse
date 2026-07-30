@@ -1,4 +1,4 @@
-![SYNAPSE — 协作即压缩](assets/readme-hero.drawio.png)
+![SYNAPSE — 协作即压缩](源代码及readme文档/assets/readme-hero.drawio.png)
 
 <p align="center">
   <strong>第三届中国研究生操作系统开源创新大赛 · 社区赛题作品</strong>
@@ -22,6 +22,8 @@
 </p>
 
 ---
+
+> 源码位于 [源代码及readme文档](源代码及readme文档)。下文的安装、运行和测试命令均请先进入该目录执行。
 
 ## 🧭 从“文本接力”到“状态协同”
 
@@ -72,7 +74,7 @@ SYNAPSE 以统一消息协议承载动作、参数、结果与能力描述，并
 
 ## 🔄 一条从协作到复用的闭环
 
-![SYNAPSE 系统架构：结构化控制面、非文本状态面与共享记忆闭环](assets/architecture.drawio.png)
+![SYNAPSE 系统架构：结构化控制面、非文本状态面与共享记忆闭环](源代码及readme文档/assets/architecture.drawio.png)
 
 四类 CodeAgent 共同覆盖任务规划、信息检索、工具执行与结果整合；结构化控制面负责协商和调度，非文本状态面负责预测、残差、CAS 句柄与校验，共享记忆则把本轮有效经验送回下一轮协作。
 
@@ -80,7 +82,7 @@ SYNAPSE 以统一消息协议承载动作、参数、结果与能力描述，并
 
 ## 📊 实验，让机制自己说话
 
-![SYNAPSE 真实 API 与公开数据集实验结果](assets/results.drawio.png)
+![SYNAPSE 真实 API 与公开数据集实验结果](源代码及readme文档/assets/results.drawio.png)
 
 SYNAPSE 在 HotpotQA、MuSiQue 与 CoQA 三类真实任务上完成纯文本模式与结构化模式的同条件 A/B 评测，并以配对检验、因果消融和受损注入验证通信效率、答案质量与可靠性。
 
