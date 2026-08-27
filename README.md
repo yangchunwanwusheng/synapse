@@ -87,8 +87,8 @@ SYNAPSE 在 HotpotQA、MuSiQue 与 CoQA 三类真实任务上完成纯文本模�
 
 实验设计包含**不少于 2 组关联性连续任务**：HotpotQA（bridge 型并行多跳）与 MuSiQue（链式 two-hop 多跳）构成第一组多跳结构对照，CoQA（38 轮长对话）与合成 G1→G2 演进序列构成第二组长程关联对照，覆盖赛题对关联任务验证的要求。
 
-- **通信收缩：** HotpotQA 实测应答 LLM token 降低 **71.09%**（N=10 点估计，脚本一键复现；来源分解见消融实验）；MuSiQue 点估计 **80.90%**（N=3 探索性，扩样至 N≥100 进行中）。进程内共享 CAS 口径下，逻辑消息字节降低 HotpotQA **94.64%**、MuSiQue **96.45%**（真实跨进程传输字节将在数据平面实测）。
-- **质量竞争力：** HotpotQA N=200 配对检验报告配对差值与 95% CI（区间含 0，未检测到显著均值差）；非劣结论按预注册界限另行判定，MuSiQue 多参考重评结果见聚合表。
+- **通信收缩：** HotpotQA 实测应答 LLM token 降低 **71.1%**（N=10 点估计，脚本一键复现，溯源 `runs/hotpot_20260724_214352/`；来源分解见消融实验）；MuSiQue 点估计 **80.9%**（N=3 探索性，溯源 `runs/musique_20260724_203011/`，扩样至 N≥100 进行中）。进程内共享 CAS 口径下，逻辑消息字节降低 HotpotQA **94.6%**、MuSiQue **96.5%**（真实跨进程传输字节将在数据平面实测）。全部主张可经 [docs/claim-evidence.csv](docs/claim-evidence.csv) 三跳对账（主张 → 文件 → run/测试）。
+- **质量竞争力：** HotpotQA N=200 配对检验报告配对差值 **-0.038 [-0.098, +0.019]**（区间含 0，未检测到显著均值差，聚合见 `04-analysis/aggregated/summary.csv`）；非劣结论按预注册界限另行判定，MuSiQue 多参考重评结果见聚合表。
 - **记忆因果性：** 有共享记忆时，残差估算载荷由 `2787 B` 收缩至 `960 B`（encoder-oracle 选基口径，理论上界）；无记忆对照几乎不收缩，**97.6%** 的收缩与记忆可用性相关（因果对照设计）。
 - **可靠协作：** 受控注入下预测基失配检出 **16/16、0 漏报**并自动回退；传输完整性校验（checksum）与端到端消费通路按决赛路线图落地后复测。
 - **意外发现：** 受控合成样本（8+8，单 seed，机制验证）下，残差信号对分布漂移的检测 AUC 达 **1.0**——通信成本本身，成为一个模型无关且无需额外开销的系统健康信号；真实任务泛化列为下一里程碑。
@@ -126,6 +126,12 @@ SYNAPSE 不是概念图上的算法组合，而是一套可以编译、运行、
 | 跨任务复用 | **有** ✅（共享记忆 + 演化链） | 无 ❌ | 无 ❌ | 无 ❌ |
 | 传输量随经验 | **递减** 🟢（记忆→预测→残差稀疏） | 不变 ➖ | 不变 ➖ | 不变 ➖ |
 
+**与三类最相关工作的事实划界**（每条一句"他们做什么 / 我们差异在哪"）：
+
+1. **潜空间通信**（C2C、LatentMAS、ThoughtComm）——他们让 Agent 在模型隐状态或全量嵌入层直接互通，需要白盒访问模型内部；SYNAPSE 只用黑盒可得的句向量做预测残差，落在商用闭源 API 可部署的系统层。
+2. **记忆系统**（MemGPT、A-MEM、Mem0、MemOS）——他们做 API 层的记忆管理框架，记忆服务于单个 Agent 的上下文组织；SYNAPSE 把记忆放进 OS 数据平面，作为通信压缩的预测基与字节计量对象。
+3. **因果审计**（对 KV 中继收益的质疑工作）——他们指出潜空间传递的收益难以测量与归因；SYNAPSE 的 VLC 校验使每一次压缩都可被检出、回退与计量，收益可复算。
+
 <table>
 <tr><td width="6" bgcolor="#1F883D"></td>
 <td bgcolor="#E6F4EA">
@@ -141,9 +147,9 @@ SYNAPSE 不是概念图上的算法组合，而是一套可以编译、运行、
 
 | 维度（分值） | 实现回应 | 关键实验数据 |
 | --- | --- | --- |
-| **通信效率**（25） | CNR 结构化协议替代长文本透传 + 残差编码仅传语义增量 | HotpotQA 应答 token ↓ **71.09%**（N=10）、MuSiQue **80.90%**（N=3 探索性）；逻辑消息字节 ↓ **94.6%–96.5%**（进程内 CAS 口径）；N=200 配对差值与 CI 见聚合表 |
+| **通信效率**（25） | CNR 结构化协议替代长文本透传 + 残差编码仅传语义增量 | HotpotQA 应答 token ↓ **71.1%**（N=10 点估计）、MuSiQue **80.9%**（N=3 探索性）；逻辑消息字节 ↓ **94.6%–96.5%**（进程内 CAS 口径）；N=200 配对差值与 CI 见聚合表 |
 | **状态传递创新**（20） | 黑盒句向量预测残差 + VLC 校验回退 | 残差估算载荷 2787 → **960**（↓65.6%，encoder-oracle 口径）；受控注入失配检出 **16/16、0 漏报**；三档选档策略随经验演化 |
-| **记忆复用效果**（20） | 三路混合检索（关键词集合相似度/标签/语义）+ ToM 预测 + 记忆演化链（取代检测） | CoQA 长对话命中率 **0.921**；97.6% 收缩因果归因；G2 跨组复用命中率 ≥ G1 |
+| **记忆复用效果**（20） | 三路混合检索（关键词集合相似度/标签/语义）+ ToM 预测 + 记忆演化链（取代检测） | CoQA 会话历史可复用覆盖率 **0.921**（top-k 检索命中口径，与质量收益分列见聚合表）；97.6% 收缩因果归因；G2 跨组复用命中率 ≥ G1 |
 | **系统完整性**（20） | 五模块架构 + 四类 CodeAgent + CodeAct 执行 + 进程内 CAS | 离线 smoke **5 项 PASS**；pytest 覆盖编解码/检索/路由；openEuler 24.03-LTS-SP3 为指定验证环境 |
 | **实验验证**（15） | 顺序隔离式 A/B（相同任务/模型/种子）+ 六类指标 + 77 次真实实验存档 | 三真实数据集 + 合成关联序列；漂移检测 **AUC=1.0**（受控合成样本，机制验证；通信成本作免费健康信号） |
 
@@ -208,8 +214,8 @@ uv run python scripts/fetch_coqa.py 5        # → data/coqa_sample.json     （
 
 | 命令 | 对应结果 |
 | --- | --- |
-| `uv run synapse hotpot --config configs/vectorengine.yaml --n 10 --embedder api --k 3` | HotpotQA 应答 token ↓ **71.09%**（N=10 点估计） |
-| `uv run synapse musique --config configs/vectorengine.yaml --n 10 --embedder api --k 3` | MuSiQue token ↓ **80.90%**（N=3 探索性点估计；多参考重评与扩样见聚合表） |
+| `uv run synapse hotpot --config configs/vectorengine.yaml --n 10 --embedder api --k 3` | HotpotQA 应答 token ↓ **71.1%**（N=10 点估计，`runs/hotpot_20260724_214352/`） |
+| `uv run synapse musique --config configs/vectorengine.yaml --n 10 --embedder api --k 3` | MuSiQue token ↓ **80.9%**（N=3 探索性点估计，`runs/musique_20260724_203011/`；多参考重评与扩样见聚合表） |
 | `uv run synapse hotpot-stats --config configs/vectorengine.yaml --n 50 --repeats 3` | 统计稳健化：配对检验 + 95% CI（质量非劣验证） |
 | `uv run synapse coqa --config configs/vectorengine.yaml --convs 2 --embedder api --k 6` | CoQA 对话式真实 token + F1 |
 
