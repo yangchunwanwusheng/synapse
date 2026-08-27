@@ -653,8 +653,11 @@ def main(argv=None) -> int:
     except ConfigError as e:  # fail-fast（P1-6）：配置错误明确报错退出，绝不静默回默认
         print(f"[ERR] 配置加载失败: {e}")
         return 2
-    except RuntimeError as e:  # 计量地基失败（如 usage 缺失，审查 P1-5）：受控退出不裸崩
-        print(f"[ERR] {_sanitize_error(e)}")
+    except RuntimeError as e:  # 计量地基失败（如 usage 缺失）：受控退出；带类型名保调试性（PR #5 审查 P2）
+        print(f"[ERR] {type(e).__name__}: {_sanitize_error(e)}")
+        import traceback
+
+        traceback.print_exc()
         return 1
 
 

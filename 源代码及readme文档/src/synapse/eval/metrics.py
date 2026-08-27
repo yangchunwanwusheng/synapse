@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 from dataclasses import asdict, dataclass, fields as dataclasses_fields
+from typing import ClassVar
 
 
 @dataclass
@@ -87,6 +88,8 @@ class Metrics:
     def hit_rate(self) -> float:
         return self.memory_hits / self.memory_queries if self.memory_queries else 0.0
 
+    _NUMERIC_FIELDS: ClassVar[tuple[str, ...]] = ()  # absorb 累加字段表；模块加载时按注解填充（见文件尾）
+
     def absorb(self, other: "Metrics") -> None:
         """按字段累加另一份 Metrics（quality 语义 = 均值量，累加后由调用方除以 n）。
 
@@ -105,7 +108,7 @@ class Metrics:
         return d
 
 
-# 模块加载时填充（ClassVar 不进 dataclass 字段；实例属性不会遮蔽）
+# 模块加载时填充（类体内 ClassVar 声明对类型检查器可见；dataclass 忽略 ClassVar 不入字段）
 Metrics._NUMERIC_FIELDS = tuple(f.name for f in dataclasses_fields(Metrics) if f.type in ("int", "float"))
 
 

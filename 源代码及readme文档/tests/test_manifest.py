@@ -190,6 +190,38 @@ def test_api_embedder_cold_warm_split():
     assert emb.requests == 2 and emb.cache_hits == 1 and emb.input_tokens == 14
 
 
+def test_api_embedder_usage_missing_fails():
+    # PR #5 审查 P1：embedding 侧 usage 缺失/不可用 → 显式 fail（与 chat 侧 require_token_usage 对称）
+    def _emb_with(resp):
+        emb = ApiEmbedder.__new__(ApiEmbedder)
+        emb._cache = {}
+        emb.requests = emb.cache_hits = emb.input_tokens = 0
+        emb.dim = 0
+        emb._model = "test-embed"
+        emb._client = SimpleNamespace(embeddings=SimpleNamespace(create=lambda model, input: resp))
+        return emb
+
+    bad_responses = [
+        SimpleNamespace(data=[SimpleNamespace(embedding=[0.1])], usage=None),  # usage 缺失
+        SimpleNamespace(data=[SimpleNamespace(embedding=[0.1])]),  # 无 usage 属性
+        SimpleNamespace(  # prompt_tokens None
+            data=[SimpleNamespace(embedding=[0.1])], usage=SimpleNamespace(prompt_tokens=None)
+        ),
+        SimpleNamespace(  # prompt_tokens 字符串
+            data=[SimpleNamespace(embedding=[0.1])], usage=SimpleNamespace(prompt_tokens="7")
+        ),
+        SimpleNamespace(  # 负数
+            data=[SimpleNamespace(embedding=[0.1])], usage=SimpleNamespace(prompt_tokens=-3)
+        ),
+    ]
+    for resp in bad_responses:
+        try:
+            _emb_with(resp).encode("x")
+            raise AssertionError(f"不可用 embed usage 应 raise: {resp.usage!r}")
+        except RuntimeError:
+            pass
+
+
 def test_cas_write_counters():
     cas = CAS()
     cas.put(b"abc")
