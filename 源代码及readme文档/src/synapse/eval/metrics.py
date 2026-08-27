@@ -2,7 +2,8 @@
 
 from __future__ import annotations
 
-from dataclasses import dataclass, asdict
+from dataclasses import asdict, dataclass, fields as dataclasses_fields
+from typing import ClassVar
 
 
 @dataclass
@@ -28,6 +29,13 @@ class Metrics:
     tier_text: int = 0  # text 档（无预测基/首轮冷启动/校验失败回退）
     frozen_snapshot_injections: int = 0  # §4.1 frozen-snapshot 记忆注入次数（保前缀缓存）
     result_spills: int = 0  # §2.3 result 序列化超阈值 → CAS 句柄 + 短摘要 的 spill 次数
+    # ---- V3-02 双层计量：字节双口径 + embedding/CAS 分列（R-P0-7/11/12）----
+    transport_bytes: int = 0  # 传输口径 = Σ len(to_wire())，每条消息真实序列化帧长
+    embed_requests: int = 0  # embedding API 请求次数（cold 成本；hash 离线路径同样计数）
+    embed_cache_hits: int = 0  # 嵌入缓存命中次数（warm 复用，不产生 API 请求）
+    embed_input_tokens: int = 0  # embedding API usage.prompt_tokens 累计（后端无 usage 时为 0）
+    cas_writes: int = 0  # CAS put 次数（共享状态建立成本，cold）
+    cas_write_bytes: int = 0  # CAS put 累计字节
 
     @property
     def llm_total_tokens(self) -> int:
@@ -37,6 +45,9 @@ class Metrics:
     def record_message(self, msg) -> None:
         self.messages += 1
         self.header_bytes += msg.header_bytes()
+        # 传输口径对 to_wire() 真实帧长计数（含 capability/meta/text 等全部字段），
+        # 与逻辑口径（header+text+nontext）分离：R-P0-7 手工相加代理值的根治。
+        self.transport_bytes += len(msg.to_wire().encode("utf-8"))
         tb = msg.text_bytes()
         if tb:
             self.text_bytes += tb
@@ -65,23 +76,53 @@ class Metrics:
 
     @property
     def wire_bytes(self) -> int:
-        """总线字节 = 结构化头 + 文本载荷 + 非文本载荷。"""
+        """逻辑口径字节 = 结构化头 + 文本载荷 + 非文本载荷（header+payload 恒等式的右侧）。"""
         return self.header_bytes + self.text_bytes + self.nontext_bytes
+
+    @property
+    def logical_bytes(self) -> int:
+        """wire_bytes 的 V3-02 正名（与 transport_bytes 构成双口径）。"""
+        return self.wire_bytes
 
     @property
     def hit_rate(self) -> float:
         return self.memory_hits / self.memory_queries if self.memory_queries else 0.0
 
+    _NUMERIC_FIELDS: ClassVar[tuple[str, ...]] = ()  # absorb 累加字段表；模块加载时按注解填充（见文件尾）
+
+    def absorb(self, other: "Metrics") -> None:
+        """按字段累加另一份 Metrics（quality 语义 = 均值量，累加后由调用方除以 n）。
+
+        统一累加路径：新增计数字段不再需要逐处 _agg 手工补行（合成 AB 聚合漏加
+        llm_input/output_tokens 导致实跑 0.0 的根因修复）。
+        """
+        for name in Metrics._NUMERIC_FIELDS:
+            setattr(self, name, getattr(self, name) + getattr(other, name))
+
     def summary(self) -> dict:
         d = asdict(self)
         d["wire_bytes"] = self.wire_bytes
+        d["logical_bytes"] = self.logical_bytes
         d["hit_rate"] = round(self.hit_rate, 3)
         d["llm_total_tokens"] = self.llm_total_tokens
         return d
 
 
+# 模块加载时填充（类体内 ClassVar 声明对类型检查器可见；dataclass 忽略 ClassVar 不入字段）
+Metrics._NUMERIC_FIELDS = tuple(f.name for f in dataclasses_fields(Metrics) if f.type in ("int", "float"))
+
+
 def _pct(base: float, new: float) -> float:
     return round((base - new) / base * 100, 2) if base else 0.0
+
+
+def embedder_stats(embedder) -> tuple[int, int, int]:
+    """读 embedder 的累计计数 (requests, cache_hits, input_tokens)；无计数器的实现返回零。"""
+    return (
+        int(getattr(embedder, "requests", 0) or 0),
+        int(getattr(embedder, "cache_hits", 0) or 0),
+        int(getattr(embedder, "input_tokens", 0) or 0),
+    )
 
 
 def improvement(text_m: Metrics, syn_m: Metrics) -> dict:
@@ -93,6 +134,7 @@ def improvement(text_m: Metrics, syn_m: Metrics) -> dict:
         "llm_token_saved_pct": _pct(text_m.llm_total_tokens, syn_m.llm_total_tokens),
         "llm_input_saved_pct": _pct(text_m.llm_input_tokens, syn_m.llm_input_tokens),
         "wire_bytes_saved_pct": _pct(text_m.wire_bytes, syn_m.wire_bytes),
+        "transport_saved_pct": _pct(text_m.transport_bytes, syn_m.transport_bytes),  # V3-02 传输口径
         "token_saved_pct": _pct(  # 旧口径(消息文本+输出)，向后兼容；通信效率请看 llm_token_saved_pct
             text_m.text_tokens + text_m.llm_tokens, syn_m.text_tokens + syn_m.llm_tokens
         ),

@@ -32,8 +32,10 @@ class HashEmbedder:
 
     def __init__(self, dim: int = 64):
         self.dim = dim
+        self.requests = 0  # V3-02：encode 调用计数（离线路径同样计数，保证口径可比）
 
     def encode(self, text: str) -> list[float]:
+        self.requests += 1
         vec = [0.0] * self.dim
         for tok in (text or "").lower().split():
             h = int(hashlib.blake2b(tok.encode("utf-8"), digest_size=8).hexdigest(), 16)
@@ -60,12 +62,39 @@ class ApiEmbedder:
         self._model = cfg.embed_model
         self._cache: dict[str, list[float]] = {}
         self.dim = 0
+        self.requests = 0  # V3-02 cold：真实嵌入 API 请求次数
+        self.cache_hits = 0  # V3-02 warm：缓存命中（零 API 请求复用）
+        self.input_tokens = 0  # API usage.prompt_tokens 累计
+
+    def _require_usage(self, resp) -> int:
+        """嵌入响应必须携带可用 usage.prompt_tokens（PR #5 审查 P1：与 chat 侧同型 fail）。
+
+        usage 对象缺失或 prompt_tokens 非 non-negative int → RuntimeError，禁止静默计 0
+        （embedding 成本与 chat 同为证据链地基；离线 HashEmbedder 无 API 调用不受此约束）。
+        """
+        usage = getattr(resp, "usage", None)
+        if usage is None:
+            raise RuntimeError(
+                "embeddings response missing usage: embed usage is mandatory for the V3-02 "
+                "evidence ledger (check backend compatibility)."
+            )
+        pt = getattr(usage, "prompt_tokens", None)
+        if type(pt) is not int or pt < 0:
+            raise RuntimeError(
+                f"embeddings usage.prompt_tokens invalid ({pt!r}): expected non-negative int; "
+                "refusing to record 0."
+            )
+        return pt
 
     def encode(self, text: str) -> list[float]:
         text = text or ""
         if text in self._cache:
+            self.cache_hits += 1
             return self._cache[text]
-        v = self._client.embeddings.create(model=self._model, input=[text]).data[0].embedding
+        resp = self._client.embeddings.create(model=self._model, input=[text])
+        v = resp.data[0].embedding
+        self.input_tokens += self._require_usage(resp)
+        self.requests += 1
         self.dim = len(v)
         self._cache[text] = v
         return v
