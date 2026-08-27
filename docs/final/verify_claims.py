@@ -8,6 +8,13 @@
 
 用法：
     cd synapse && python -X utf8 docs/final/verify_claims.py
+
+依赖：python-docx 与 python-pptx（仓库源码目录 `uv sync --extra dev` 即含，
+或裸环境 `pip install python-docx python-pptx`）。
+
+已知边界：文本提取覆盖 docx 段落/表格与 pptx 文本框/表格；不覆盖 PPT 图表
+part（chart XML 轴标签/数据标签）、SmartArt、演讲者备注，以及 docx 页眉/
+页脚/脚注。已知替换点由 retarget 脚本的「期望命中次数精确匹配」兜底。
 """
 
 from __future__ import annotations
@@ -111,6 +118,15 @@ def check_paths() -> tuple[list[str], list[str]]:
     """
     errors, warnings = [], []
     runs_available = (REPO_ROOT / "runs").is_dir()
+    analysis_available = (REPO_ROOT / "04-analysis").is_dir()
+
+    def archive_missing(ref: str) -> bool:
+        """引用指向未入库存档目录（V3-09 待裁决）时降级，两类目录分别判断。"""
+        if ref.startswith("runs/"):
+            return not runs_available
+        if ref.startswith("04-analysis/"):
+            return not analysis_available
+        return False
     with open(CSV_PATH, encoding="utf-8", newline="") as f:
         rows = list(csv.DictReader(f))
     if not rows:
@@ -127,7 +143,7 @@ def check_paths() -> tuple[list[str], list[str]]:
                 if ref is None:
                     continue
                 if not ref_exists(ref):
-                    if (not runs_available) and (ref.startswith("runs/") or ref.startswith("04-analysis/")):
+                    if archive_missing(ref):
                         if not warned:
                             warnings.append("runs/ 与 04-analysis/ 本地存档未随仓库分发（V3-09 待裁决）："
                                             "run 级溯源需在本地全量存档环境执行，克隆环境跳过该类路径")
@@ -157,7 +173,10 @@ def main() -> int:
     sys.stdout.reconfigure(encoding="utf-8")
     e1, w1 = check_paths()
     e2 = check_residual()
-    print(f"台账三跳对账：{'通过（全部路径可达）' if not e1 else f'{len(e1)} 处不可达'}")
+    path_verdict = "通过（全部路径可达）" if not e1 else f"{len(e1)} 处不可达"
+    if not e1 and w1:
+        path_verdict = "通过（run 级路径降级跳过）"
+    print(f"台账三跳对账：{path_verdict}")
     for e in e1:
         print("  " + e)
     for w in w1:
@@ -165,6 +184,8 @@ def main() -> int:
     print(f"材料残留终检：{'通过（四项点名旧口径无残留）' if not e2 else f'{len(e2)} 处残留'}")
     for e in e2:
         print("  " + e)
+    if not (e1 or e2):
+        print("边界说明：文本提取覆盖 docx 段落/表格与 pptx 文本框/表格，不含图表 part/SmartArt/备注/页眉脚注。")
     return 1 if (e1 or e2) else 0
 
 

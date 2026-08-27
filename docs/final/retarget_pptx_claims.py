@@ -3,11 +3,14 @@
 
 依据：docs/决赛T45总执行方案-v3.md §三 改口表 + docs/claim-evidence.csv 台账。
 纪律：不手改二进制——本脚本为 docs/final/ 构建链的一环，声明式替换、
-从 HEAD 版本一次性重放（非幂等：重放前须 git checkout 原文件）。
+从 master 版本一次性重放（非幂等：重放前须 git checkout master -- 本文件）。
 
 用法：
-    cd synapse && git checkout -- "SYNAPSE作品介绍PPT.pptx" \
+    cd synapse && git checkout master -- "SYNAPSE作品介绍PPT.pptx" \
         && python -X utf8 docs/final/retarget_pptx_claims.py
+
+依赖：python-pptx（仓库源码目录 `uv sync --extra dev` 即含，
+或裸环境 `pip install python-pptx`）。
 
 改动范围（逐条对应台账 claim_id）：
   s6  竞品对比行标签改三类对照（潜空间通信/记忆系统 MemOS）并同步矩阵值与图标
@@ -246,6 +249,9 @@ def main() -> int:
             else:
                 errors.append(f"s6 matrix-value({fix['old']}@{fix['row']}×{fix['col']}) 未找到")
         icon_fixes = fix_matrix_icons(slide6)
+        if len(icon_fixes) != len(MATRIX_FIXES):
+            errors.append(f"s6 图标级修正仅完成 {len(icon_fixes)}/{len(MATRIX_FIXES)} 处"
+                          f"（模板或目标格定位失败）：{icon_fixes}")
 
     print(f"矩阵值修正 {len(matrix_done)} 处：{[f['row'] + '×' + f['col'] for f in matrix_done]}")
     print(f"图标级修正 {len(icon_fixes)} 处：{icon_fixes}")

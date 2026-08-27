@@ -9,6 +9,9 @@
     cd synapse && git checkout master -- "SYNAPSE项目说明书.docx" \
         && python -X utf8 docs/final/retarget_docx_claims.py
 
+依赖：python-docx（仓库源码目录 `uv sync --extra dev` 即含，
+或裸环境 `pip install python-docx`）。
+
 改动范围（对应台账 claim_id）：
   §7.2 正文与汇总表：71.09/94.64/80.90/96.45 两位小数→一位小数口径 + N 标注
       TOKEN-HOTPOT-71 / TOKEN-MUSIQUE-80 / WIRE-BYTES-94
