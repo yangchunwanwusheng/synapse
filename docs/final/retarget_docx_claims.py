@@ -2,10 +2,12 @@
 """SYNAPSE 项目说明书旧强数字物理替换（Issue #1 / V3-01）。
 
 依据：docs/决赛T45总执行方案-v3.md §三 改口表 + docs/claim-evidence.csv 台账。
-纪律：不手改二进制——本脚本为 docs/final/ 构建链的一环，声明式替换、可重跑、可审查。
+纪律：不手改二进制——本脚本为 docs/final/ 构建链的一环，声明式替换、
+从 master 版本一次性重放（非幂等：重放前须 git checkout master -- 本文件）。
 
 用法：
-    cd synapse && python -X utf8 docs/final/retarget_docx_claims.py
+    cd synapse && git checkout master -- "SYNAPSE项目说明书.docx" \
+        && python -X utf8 docs/final/retarget_docx_claims.py
 
 改动范围（对应台账 claim_id）：
   §7.2 正文与汇总表：71.09/94.64/80.90/96.45 两位小数→一位小数口径 + N 标注
@@ -87,9 +89,12 @@ CELL_RULES = [
     ("80.90%", "80.9%", 1, "TOKEN-MUSIQUE-80"),
     ("96.45%", "96.5%", 1, "WIRE-BYTES-94"),
     ("+0.333", "重评中", 1, "QUAL-MUSIQUE-DF1"),
+    # 并排 F1 点估计一并撤下（0.857−0.524 即被撤回的 +0.333，避免视觉上仍成立）
+    ("0.857", "—", 1, "QUAL-MUSIQUE-DF1-F1"),
+    ("0.524", "—", 1, "QUAL-MUSIQUE-DF1-F1"),
 ]
 
-BANNED = ["71.09", "94.64", "80.90", "96.45", "+0.333", "统计不可区分"]
+BANNED = ["71.09", "94.64", "80.90", "96.45", "+0.333", "0.857", "0.524", "统计不可区分"]
 
 
 def rewrite_para(para, new_text: str) -> None:

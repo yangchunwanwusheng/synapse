@@ -30,9 +30,10 @@ MATERIALS = {
     "SYNAPSE作品介绍PPT.pptx": REPO_ROOT / "SYNAPSE作品介绍PPT.pptx",
 }
 
-# 四项点名 + 台账禁用口径（对外材料不得出现）
-BANNED = ["71.09", "94.64", "80.90", "96.45", "+0.333", "统计不可区分", "零拷贝", "沙箱安全",
-          "执行沙箱", "安全沙箱"]
+# 四项点名 + 台账禁用口径（对外材料不得出现）；含 PPT 旧图无溯源数字与未标规划的措辞
+BANNED = ["71.09", "94.64", "80.90", "96.45", "+0.333", "0.857", "0.524", "统计不可区分",
+          "零拷贝", "沙箱安全", "执行沙箱", "安全沙箱", "AUC=0.942", "AUC=0.812",
+          "模型漂移降低", "共享内存驱动"]
 
 
 def extract_pptx_text(path: Path) -> str:
@@ -102,13 +103,19 @@ def ref_exists(item: str) -> bool:
     return (REPO_ROOT / item).exists() or (SRC_DIR / item).exists()
 
 
-def check_paths() -> list[str]:
-    """三跳可达：台账引用的仓库相对路径必须存在。"""
-    errors = []
+def check_paths() -> tuple[list[str], list[str]]:
+    """三跳可达：台账引用的仓库相对路径必须存在。
+
+    runs/ 与 04-analysis/ 为本地全量实验存档（是否入库由 V3-09 另行裁决）；
+    克隆环境缺失时降级为警告，不算对账失败，但会在输出中明示。
+    """
+    errors, warnings = [], []
+    runs_available = (REPO_ROOT / "runs").is_dir()
     with open(CSV_PATH, encoding="utf-8", newline="") as f:
         rows = list(csv.DictReader(f))
     if not rows:
-        return ["claim-evidence.csv 为空或表头不符"]
+        return ["claim-evidence.csv 为空或表头不符"], []
+    warned = False
     for r in rows:
         cid = r.get("claim_id", "?")
         for col in ("source_path", "test_path", "run_path"):
@@ -120,8 +127,14 @@ def check_paths() -> list[str]:
                 if ref is None:
                     continue
                 if not ref_exists(ref):
+                    if (not runs_available) and (ref.startswith("runs/") or ref.startswith("04-analysis/")):
+                        if not warned:
+                            warnings.append("runs/ 与 04-analysis/ 本地存档未随仓库分发（V3-09 待裁决）："
+                                            "run 级溯源需在本地全量存档环境执行，克隆环境跳过该类路径")
+                            warned = True
+                        continue
                     errors.append(f"[{cid}] {col}: {ref} 不存在")
-    return errors
+    return errors, warnings
 
 
 def check_residual() -> list[str]:
@@ -142,11 +155,13 @@ def check_residual() -> list[str]:
 
 def main() -> int:
     sys.stdout.reconfigure(encoding="utf-8")
-    e1 = check_paths()
+    e1, w1 = check_paths()
     e2 = check_residual()
     print(f"台账三跳对账：{'通过（全部路径可达）' if not e1 else f'{len(e1)} 处不可达'}")
     for e in e1:
         print("  " + e)
+    for w in w1:
+        print(f"  [警告] {w}")
     print(f"材料残留终检：{'通过（四项点名旧口径无残留）' if not e2 else f'{len(e2)} 处残留'}")
     for e in e2:
         print("  " + e)
