@@ -34,7 +34,9 @@ class Config:
     abl_no_consolidation: bool = False  # 关跨任务巩固 → 记忆不固化
     abl_no_residual: bool = False  # 发全量量化向量（无预测/无稀疏）→ 字节应更大
     abl_no_checksum: bool = False  # 关语义校验/回退 → 失配时端到端正确性应降
-    abl_no_memory: bool = False  # B3-no-mem：每任务清空跨任务记忆 → 证残差率下降因果源于记忆（P0-1 假设3 归因 ablation）
+    abl_no_memory: bool = (
+        False  # B3-no-mem：每任务清空跨任务记忆 → 证残差率下降因果源于记忆（P0-1 假设3 归因 ablation）
+    )
 
     # ---- 真实数据集 QA ----
     qa_sentences_k: int = 4  # [CoQA] synapse 每轮检索的故事句子数（非文本选择）
@@ -59,17 +61,57 @@ class Config:
 
 
 def load_config(path: str | None = None) -> Config:
-    """从 YAML 覆盖默认配置；缺 pyyaml 或无 path 时返回默认（保证 smoke 零依赖）。"""
-    if not path or not os.path.exists(path):
+    """从 YAML 覆盖默认配置；未指定 path 时返回默认（smoke 零依赖）。
+
+    V3-02 fail-fast（P1-6）：path 显式给出后，文件缺失 / YAML 语法错误 / 未知键 /
+    字段类型不符一律抛 ConfigError——静默回退默认配置会让实验以为自己跑在
+    configs/vectorengine.yaml 上而实际全是 mock，属于证据链事故。
+    """
+    if not path:
         return Config()
+    if not os.path.exists(path):
+        raise ConfigError(f"配置文件不存在: {path}")
     try:
         import yaml  # 可选依赖
-
+    except ImportError as e:
+        raise ConfigError(f"pyyaml 未安装（uv sync --extra config），无法加载 {path}") from e
+    try:
         with open(path, encoding="utf-8") as f:
             data = yaml.safe_load(f) or {}
-        known = {k: v for k, v in data.items() if k in Config.__dataclass_fields__}
-        if "seeds" in known:
-            known["seeds"] = tuple(known["seeds"])
-        return Config(**known)
-    except Exception:
-        return Config()
+    except yaml.YAMLError as e:
+        raise ConfigError(f"YAML 解析失败: {path}\n{e}") from e
+    if not isinstance(data, dict):
+        raise ConfigError(f"配置文件顶层必须是映射（键值对）: {path}")
+    unknown = sorted(set(data) - set(Config.__dataclass_fields__))
+    if unknown:
+        raise ConfigError(f"配置含未知字段 {unknown}（疑似拼写错误，可用字段见 Config 定义）: {path}")
+    _check_types(path, data)
+    known = dict(data)
+    if "seeds" in known:
+        known["seeds"] = tuple(known["seeds"])
+    return Config(**known)
+
+
+class ConfigError(ValueError):
+    """配置加载失败（fail-fast，不静默回退默认）。"""
+
+
+_TYPE_OK = {
+    "int": int,
+    "float": (int, float),
+    "str": str,
+    "bool": bool,
+    "tuple": (list, tuple),
+    "tuple[int, ...]": (list, tuple),
+}
+
+
+def _check_types(path: str, data: dict) -> None:
+    import dataclasses as dc
+
+    for f in dc.fields(Config):
+        if f.name not in data:
+            continue
+        want, val = _TYPE_OK.get(f.type), data[f.name]
+        if want and val is not None and not isinstance(val, want):
+            raise ConfigError(f"配置字段 {f.name} 期望 {f.type}，实得 {type(val).__name__}: {path}")

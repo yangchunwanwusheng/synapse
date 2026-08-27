@@ -32,8 +32,10 @@ class HashEmbedder:
 
     def __init__(self, dim: int = 64):
         self.dim = dim
+        self.requests = 0  # V3-02：encode 调用计数（离线路径同样计数，保证口径可比）
 
     def encode(self, text: str) -> list[float]:
+        self.requests += 1
         vec = [0.0] * self.dim
         for tok in (text or "").lower().split():
             h = int(hashlib.blake2b(tok.encode("utf-8"), digest_size=8).hexdigest(), 16)
@@ -60,12 +62,21 @@ class ApiEmbedder:
         self._model = cfg.embed_model
         self._cache: dict[str, list[float]] = {}
         self.dim = 0
+        self.requests = 0  # V3-02 cold：真实嵌入 API 请求次数
+        self.cache_hits = 0  # V3-02 warm：缓存命中（零 API 请求复用）
+        self.input_tokens = 0  # API usage.prompt_tokens 累计（后端不回 usage 时保持 0，不猜测）
 
     def encode(self, text: str) -> list[float]:
         text = text or ""
         if text in self._cache:
+            self.cache_hits += 1
             return self._cache[text]
-        v = self._client.embeddings.create(model=self._model, input=[text]).data[0].embedding
+        resp = self._client.embeddings.create(model=self._model, input=[text])
+        v = resp.data[0].embedding
+        usage = getattr(resp, "usage", None)
+        if usage is not None:
+            self.input_tokens += int(getattr(usage, "prompt_tokens", 0) or 0)
+        self.requests += 1
         self.dim = len(v)
         self._cache[text] = v
         return v

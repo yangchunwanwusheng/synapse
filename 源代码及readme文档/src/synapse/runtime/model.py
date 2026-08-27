@@ -74,6 +74,21 @@ def normalize_codeact(content: str) -> str:
     return f"<code>\n{code}\n</code>"  # full pair: passes endswith check AND parse_code_blobs
 
 
+def require_token_usage(msg):
+    """真实后端响应必须携带 token_usage（V3-02：usage 缺失 fail 而非静默计 0）。
+
+    计量是证据链的地基：缺 usage 时计 0 会让 token 节省数字失真且不可察觉，
+    因此在这里显式失败，让问题在请求层就暴露而不是污染 run 落档。
+    """
+    tu = getattr(msg, "token_usage", None)
+    if tu is None:
+        raise RuntimeError(
+            "LLM response missing token_usage: chat usage is mandatory for the V3-02 evidence "
+            "ledger (check backend compatibility / response shape)."
+        )
+    return tu
+
+
 try:  # ChatMessage 路径在不同版本可能不同
     from smolagents.models import ChatMessage
 except Exception:  # pragma: no cover
@@ -157,10 +172,9 @@ def make_model(cfg, role: str):
 
             def generate(self, *a, **kw):  # noqa: ANN001
                 msg = super().generate(*a, **kw)
-                tu = getattr(msg, "token_usage", None)
-                if tu is not None:
-                    self.output_tokens += int(getattr(tu, "output_tokens", 0) or 0)
-                    self.input_tokens += int(getattr(tu, "input_tokens", 0) or 0)
+                tu = require_token_usage(msg)
+                self.output_tokens += int(getattr(tu, "output_tokens", 0) or 0)
+                self.input_tokens += int(getattr(tu, "input_tokens", 0) or 0)
                 try:  # repair flaky CodeAct so the CodeAgent path doesn't burn all steps
                     fixed = normalize_codeact(msg.content or "")
                     if fixed != msg.content:

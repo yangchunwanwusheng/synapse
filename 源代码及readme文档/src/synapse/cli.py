@@ -11,11 +11,43 @@ import json
 import os
 import sys
 from dataclasses import replace
-from datetime import datetime
 
-from .config import Config, load_config
+from .config import Config, ConfigError, load_config
 from .eval.harness import ABRunner
+from .eval.manifest import dataset_info, write_run
 from . import tasks as T
+
+
+def _cmd_desc(args, name: str) -> str:
+    """命令与关键参数摘要（进 manifest.command，供溯源）。"""
+    parts = [name]
+    for k in (
+        "config",
+        "rounds",
+        "topic",
+        "g1",
+        "g2",
+        "convs",
+        "n",
+        "repeats",
+        "k",
+        "embedder",
+        "seed",
+        "retrieval",
+    ):
+        v = getattr(args, k, None)
+        if v is not None and not (isinstance(v, bool) and not v):
+            parts.append(f"--{k} {v}")
+    if getattr(args, "no_memory", False):
+        parts.append("--no-memory")
+    return " ".join(parts)
+
+
+def _write_run(tag, cfg, payload, command, dataset=None, seed=None, per_item=None) -> str:
+    """V3-02 统一落档：manifest + 聚合（+可选逐题）+ schema 校验。"""
+    out_dir = write_run(tag, cfg, payload, command, dataset=dataset, seed=seed, per_item=per_item)
+    print(f"  artifacts -> {out_dir}/result.json")
+    return out_dir
 
 
 def _load_dotenv(path: str = ".env") -> None:
@@ -65,6 +97,9 @@ def cmd_smoke(_args) -> int:
         "记忆复用命中(关联任务 hit>0)": syn_hit > 0,
         "收缩(末轮非文本字节<=首轮)": contraction[-1] <= contraction[0],
         "区分度(负例命中率<关联命中率)": neg_hit < syn_hit,
+        "计数守恒(聚合==Σ轨迹 transport)": linked["synapse_total"]["transport_bytes"]
+        == sum(t["transport_bytes"] for t in linked["synapse_trajectory"]),
+        "token聚合非零(llm input/output 已累加)": linked["text_total"]["llm_input_tokens"] > 0,
     }
 
     print("== SYNAPSE smoke (offline mock) ==")
@@ -78,6 +113,12 @@ def cmd_smoke(_args) -> int:
     for name, ok in checks.items():
         print(f"  [{'PASS' if ok else 'FAIL'}] {name}")
     failed = [k for k, v in checks.items() if not v]
+    _write_run(
+        "smoke",
+        cfg,
+        {"linked": linked, "negative": negative, "checks": {k: bool(v) for k, v in checks.items()}},
+        command="smoke",
+    )
     if failed:
         print(f"SMOKE FAILED: {failed}")
         return 1
@@ -89,6 +130,7 @@ def cmd_ab(args) -> int:
     cfg = load_config(args.config)
     res = ABRunner(cfg).run(T.linked_continuous(args.rounds, args.rounds))
     print(json.dumps(res, ensure_ascii=False, indent=2))
+    _write_run("ab", cfg, res, command=_cmd_desc(args, "ab"))
     return 0
 
 
@@ -100,6 +142,12 @@ def cmd_probe(args) -> int:
     print(
         f"== PROBE: backend={cfg.llm_backend} model={cfg.model} base={cfg.api_base} temp={cfg.temperature} =="
     )
+    payload = {
+        "backend": cfg.llm_backend,
+        "model": cfg.model,
+        "api_base": cfg.api_base,
+        "temperature": cfg.temperature,
+    }
 
     # 1) 原始生成：看输出形态（是否夹带 <think> 块 → 破坏结构化解析）
     from .runtime.model import make_model
@@ -109,12 +157,17 @@ def cmd_probe(args) -> int:
         msg = mdl.generate([{"role": "user", "content": "Reply with exactly: PROBE_OK"}])
     except Exception as e:  # noqa: BLE001  探针需暴露任何后端错误
         print("[raw.generate] ERROR:", repr(e))
+        payload["status"] = "error"
+        payload["raw_error"] = repr(e)
+        _write_run("probe", cfg, payload, command=_cmd_desc(args, "probe"))
         return 1
     content = msg.content or ""
     print("[raw.generate] content[:200]=", repr(content[:200]))
     print("[raw.generate] token_usage=", getattr(msg, "token_usage", None))
     has_think = "<think" in content.lower()
     print(f"  [{'WARN(含thinking块)' if has_think else 'OK'}] 输出形态")
+    payload["raw_content_head"] = content[:200]
+    payload["raw_has_think_block"] = has_think
 
     # 2) 端到端一个任务：CodeAct 解析 + 全管线 + 真实 token 计数
     from .modes.synapse_mode import SynapseSession
@@ -126,6 +179,9 @@ def cmd_probe(args) -> int:
 
         traceback.print_exc()
         print("[e2e] ERROR:", repr(e))
+        payload["status"] = "error"
+        payload["e2e_error"] = repr(e)
+        _write_run("probe", cfg, payload, command=_cmd_desc(args, "probe"))
         return 1
     mm = out["metrics"]
     print("[e2e] conclusion[:160]=", repr((out["conclusion"] or "")[:160]))
@@ -135,6 +191,10 @@ def cmd_probe(args) -> int:
     )
     ok = bool(out["conclusion"]) and mm.llm_tokens > 0
     print(f"  [{'PASS' if ok else 'FAIL'}] 端到端跑通 + 真实 token 计数>0")
+    payload["conclusion_head"] = (out["conclusion"] or "")[:160]
+    payload["checksum_ok"] = out["checksum_ok"]
+    payload["e2e_metrics"] = mm.summary()
+    _write_run("probe", cfg, payload, command=_cmd_desc(args, "probe"))
     return 0 if ok else 1
 
 
@@ -162,13 +222,7 @@ def cmd_signal(args) -> int:
     )
     linked = ABRunner(cfg).run(T.g1_family(args.rounds, topic=args.topic))
     negative = ABRunner(cfg).run(T.negative_family(min(args.rounds, 6)))
-
-    out_dir = os.path.join("runs", f"signal_{datetime.now().strftime('%Y%m%d_%H%M%S')}")
-    os.makedirs(out_dir, exist_ok=True)
-    with open(os.path.join(out_dir, "result.json"), "w", encoding="utf-8") as f:
-        json.dump(
-            {"config": cfg.to_dict(), "linked": linked, "negative": negative}, f, ensure_ascii=False, indent=2
-        )
+    _write_run("signal", cfg, {"linked": linked, "negative": negative}, command=_cmd_desc(args, "signal"))
 
     imp = linked["improvement"]
     lc, nc = linked["contraction_bytes"], negative["contraction_bytes"]
@@ -206,15 +260,12 @@ def cmd_signal(args) -> int:
     contraction_ok = ldrop > 0  # 关联族后半 < 前半（字节随经验下降）
     # 因果区分用「字节水平」而非 drop%（后者对逐点噪声敏感）：关联达到显著更低的字节 + 命中更高
     causal_ok = ratio is not None and ratio < 0.85 and lhit > nhit
-    print(
-        f"  [{'PASS' if kc1_ok else 'FAIL'}] synapse 省线缆字节 (saved%={imp['wire_bytes_saved_pct']})"
-    )
+    print(f"  [{'PASS' if kc1_ok else 'FAIL'}] synapse 省线缆字节 (saved%={imp['wire_bytes_saved_pct']})")
     print(f"  [{'PASS' if contraction_ok else 'WARN'}] 关联族字节下降 (前半 {lf} → 后半 {ls}, drop={ldrop}%)")
     print(
         f"  [{'PASS' if causal_ok else 'WARN'}] 因果区分 (关联字节 {ls} vs 负例 {ns}, ratio={ratio}; "
         f"命中 {lhit} vs {nhit})"
     )
-    print(f"  artifacts -> {out_dir}/result.json")
     return 0 if (kc1_ok and contraction_ok) else 1
 
 
@@ -247,13 +298,7 @@ def cmd_m7(args) -> int:
     syn = res["synapse_trajectory"]
     g1s = _group_stats(syn[: args.g1])
     g2s = _group_stats(syn[args.g1 :])
-
-    out_dir = os.path.join("runs", f"m7_{datetime.now().strftime('%Y%m%d_%H%M%S')}")
-    os.makedirs(out_dir, exist_ok=True)
-    with open(os.path.join(out_dir, "result.json"), "w", encoding="utf-8") as f:
-        json.dump(
-            {"config": cfg.to_dict(), "result": res, "g1": g1s, "g2": g2s}, f, ensure_ascii=False, indent=2
-        )
+    _write_run("m7", cfg, {"result": res, "g1": g1s, "g2": g2s}, command=_cmd_desc(args, "m7"))
 
     print(json.dumps({"G1": g1s, "G2": g2s, "improvement": res["improvement"]}, ensure_ascii=False, indent=2))
     # M7 跨组复用：G2（暖启动，复用 G1）每任务字节 ≤ G1（含冷启动）且命中率 ≥ G1
@@ -263,7 +308,6 @@ def cmd_m7(args) -> int:
         f"(G2 均字节 {g2s['mean_nontext_bytes']} ≤ G1 {g1s['mean_nontext_bytes']}; "
         f"G2 命中 {g2s['hit_rate']} ≥ G1 {g1s['hit_rate']})"
     )
-    print(f"  artifacts -> {out_dir}/result.json")
     return 0
 
 
@@ -280,11 +324,13 @@ def cmd_coqa(args) -> int:
         f"convs={args.convs} (每段=1组关联连续任务) =="
     )
     res = run_coqa(cfg, n_conv=args.convs)
-
-    out_dir = os.path.join("runs", f"coqa_{datetime.now().strftime('%Y%m%d_%H%M%S')}")
-    os.makedirs(out_dir, exist_ok=True)
-    with open(os.path.join(out_dir, "result.json"), "w", encoding="utf-8") as f:
-        json.dump({"config": cfg.to_dict(), "result": res}, f, ensure_ascii=False, indent=2)
+    _write_run(
+        "coqa",
+        cfg,
+        res,
+        command=_cmd_desc(args, "coqa"),
+        dataset=dataset_info("data/coqa_sample.json", args.convs),
+    )
 
     imp, tt, st = res["improvement"], res["text_total"], res["synapse_total"]
     print(
@@ -320,7 +366,6 @@ def cmd_coqa(args) -> int:
     print(
         f"  [{'PASS' if f1_ok else 'WARN'}] 答案质量保持 (synapse F1 {st['quality']} vs text {tt['quality']})"
     )
-    print(f"  artifacts -> {out_dir}/result.json")
     return 0 if (token_ok and f1_ok) else 1
 
 
@@ -333,7 +378,9 @@ def cmd_hotpot(args) -> int:
     cfg = _real_cfg(args)
     if cfg is None:
         return 2
-    cfg = replace(cfg, embedder=args.embedder, qa_para_k=args.k, qa_retrieval=getattr(args, "retrieval", "single"))
+    cfg = replace(
+        cfg, embedder=args.embedder, qa_para_k=args.k, qa_retrieval=getattr(args, "retrieval", "single")
+    )
     from .qa.harness import run_hotpot
 
     print(
@@ -341,7 +388,14 @@ def cmd_hotpot(args) -> int:
         f"retrieval={cfg.qa_retrieval} items={args.n} (每题 10 段=2 金标+8 干扰) =="
     )
     res = run_hotpot(cfg, n_items=args.n, seed=getattr(args, "seed", None))
-    return _print_hotpot_result(cfg, res, "hotpot")
+    return _print_hotpot_result(
+        cfg,
+        res,
+        "hotpot",
+        command=_cmd_desc(args, "hotpot"),
+        dataset=dataset_info("data/hotpot_sample.json", args.n),
+        seed=getattr(args, "seed", None),
+    )
 
 
 def cmd_musique(args) -> int:
@@ -351,7 +405,9 @@ def cmd_musique(args) -> int:
     cfg = _real_cfg(args)
     if cfg is None:
         return 2
-    cfg = replace(cfg, embedder=args.embedder, qa_para_k=args.k, qa_retrieval=getattr(args, "retrieval", "single"))
+    cfg = replace(
+        cfg, embedder=args.embedder, qa_para_k=args.k, qa_retrieval=getattr(args, "retrieval", "single")
+    )
     from .qa.harness import run_hotpot
 
     print(
@@ -359,15 +415,27 @@ def cmd_musique(args) -> int:
         f"retrieval={cfg.qa_retrieval} items={args.n} (每题 20 段) =="
     )
     res = run_hotpot(cfg, n_items=args.n, path="data/musique_sample.json", seed=getattr(args, "seed", None))
-    return _print_hotpot_result(cfg, res, "musique")
+    return _print_hotpot_result(
+        cfg,
+        res,
+        "musique",
+        command=_cmd_desc(args, "musique"),
+        dataset=dataset_info("data/musique_sample.json", args.n),
+        seed=getattr(args, "seed", None),
+    )
 
 
-def _print_hotpot_result(cfg, res, tag: str) -> int:
+def _print_hotpot_result(cfg, res, tag: str, command: str = "", dataset=None, seed=None) -> int:
     """hotpot/musique 共用结果输出 + 落档。"""
-    out_dir = os.path.join("runs", f"{tag}_{datetime.now().strftime('%Y%m%d_%H%M%S')}")
-    os.makedirs(out_dir, exist_ok=True)
-    with open(os.path.join(out_dir, "result.json"), "w", encoding="utf-8") as f:
-        json.dump({"config": cfg.to_dict(), "result": res}, f, ensure_ascii=False, indent=2)
+    _write_run(
+        tag,
+        cfg,
+        res,
+        command=command or tag,
+        dataset=dataset,
+        seed=seed,
+        per_item=res.get("per_item"),
+    )
     imp, tt, st = res["improvement"], res["text"], res["synapse"]
     print(
         json.dumps(
@@ -403,7 +471,6 @@ def _print_hotpot_result(cfg, res, tag: str) -> int:
         f"  [{'PASS' if f1_ok else 'WARN'}] 答案质量保持 "
         f"(synapse F1 {st['quality']} vs text {tt['quality']}, 金标召回 {res['gold_recall']})"
     )
-    print(f"  artifacts -> {out_dir}/result.json")
     return 0 if (token_ok and f1_ok) else 1
 
 
@@ -420,11 +487,13 @@ def cmd_hotpot_stats(args) -> int:
         f"N={args.n} × R={args.repeats} =="
     )
     res = run_hotpot_stats(cfg, n_items=args.n, repeats=args.repeats)
-
-    out_dir = os.path.join("runs", f"hotpot_stats_{datetime.now().strftime('%Y%m%d_%H%M%S')}")
-    os.makedirs(out_dir, exist_ok=True)
-    with open(os.path.join(out_dir, "result.json"), "w", encoding="utf-8") as f:
-        json.dump({"config": cfg.to_dict(), "result": res}, f, ensure_ascii=False, indent=2)
+    _write_run(
+        "hotpot_stats",
+        cfg,
+        res,
+        command=_cmd_desc(args, "hotpot-stats"),
+        dataset=dataset_info("data/hotpot_sample.json", args.n),
+    )
 
     ts, tf, sf, gr = res["token_saved"], res["text_f1"], res["syn_f1"], res["gold_recall"]
     pd = res["paired_delta_f1"]
@@ -452,7 +521,6 @@ def cmd_hotpot_stats(args) -> int:
         f"  [{'PASS' if noninferior else 'WARN'}] 质量非劣 (配对 ΔF1={pd['mean']}, 95%CI={pd['ci95']}, "
         f"胜/平/负={pd['syn_win']}/{pd['tie']}/{pd['syn_loss']})"
     )
-    print(f"  artifacts -> {out_dir}/result.json")
     return 0 if (token_ok and noninferior) else 1
 
 
@@ -475,7 +543,9 @@ def main(argv=None) -> int:
     sg.add_argument("--config", default=None)
     sg.add_argument("--rounds", type=int, default=5)
     sg.add_argument("--topic", default="the Transformer attention mechanism in deep learning")
-    sg.add_argument("--no-memory", action="store_true", help="B3-no-mem ablation：每任务清空记忆（证假设3归因）")
+    sg.add_argument(
+        "--no-memory", action="store_true", help="B3-no-mem ablation：每任务清空记忆（证假设3归因）"
+    )
     sg.set_defaults(func=cmd_signal)
     m7 = sub.add_parser("m7", help="M7：≥2 组关联连续任务，验证 G2 跨组复用 G1 记忆")
     m7.add_argument("--config", default=None)
@@ -495,8 +565,12 @@ def main(argv=None) -> int:
     hp.add_argument("--embedder", default="api", choices=["api", "hash", "sentence"])
     hp.add_argument("--k", type=int, default=3, help="synapse 每题检索段数（10 段取 k）")
     hp.add_argument("--seed", type=int, default=None, help="题序 shuffle seed（P0-4 可复现性；None=原序）")
-    hp.add_argument("--retrieval", default="single", choices=["single", "twohop", "bridge"],
-                    help="检索模式：single=单跳 | twohop=嵌入查询扩展 | bridge=词法实体桥接")
+    hp.add_argument(
+        "--retrieval",
+        default="single",
+        choices=["single", "twohop", "bridge"],
+        help="检索模式：single=单跳 | twohop=嵌入查询扩展 | bridge=词法实体桥接",
+    )
     hp.set_defaults(func=cmd_hotpot)
     mq = sub.add_parser("musique", help="真实数据集(MuSiQue)：20 段干扰更密，第二数据集交叉验证")
     mq.add_argument("--config", default=None)
@@ -504,8 +578,12 @@ def main(argv=None) -> int:
     mq.add_argument("--embedder", default="api", choices=["api", "hash", "sentence"])
     mq.add_argument("--k", type=int, default=3, help="synapse 每题检索段数（20 段取 k）")
     mq.add_argument("--seed", type=int, default=None, help="题序 shuffle seed（P0-4 可复现性）")
-    mq.add_argument("--retrieval", default="single", choices=["single", "twohop", "bridge"],
-                    help="检索模式：single=单跳 | twohop=嵌入查询扩展 | bridge=词法实体桥接")
+    mq.add_argument(
+        "--retrieval",
+        default="single",
+        choices=["single", "twohop", "bridge"],
+        help="检索模式：single=单跳 | twohop=嵌入查询扩展 | bridge=词法实体桥接",
+    )
     mq.set_defaults(func=cmd_musique)
     hs = sub.add_parser("hotpot-stats", help="HotpotQA 统计稳健化：N×R + 配对置信区间")
     hs.add_argument("--config", default=None)
@@ -515,7 +593,11 @@ def main(argv=None) -> int:
     hs.add_argument("--k", type=int, default=3, help="synapse 每题检索段数（10 段取 k）")
     hs.set_defaults(func=cmd_hotpot_stats)
     args = p.parse_args(argv)
-    return args.func(args)
+    try:
+        return args.func(args)
+    except ConfigError as e:  # fail-fast（P1-6）：配置错误明确报错退出，绝不静默回默认
+        print(f"[ERR] 配置加载失败: {e}")
+        return 2
 
 
 if __name__ == "__main__":

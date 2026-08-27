@@ -3,6 +3,7 @@
 同一任务序列分别跑 text 模式（无状态、无记忆基线）与 synapse 模式（共享记忆持续累积），
 输出每轮 Metrics 轨迹——synapse 的 nontext_bytes 随累计经验下降。
 """
+
 from __future__ import annotations
 
 
@@ -41,25 +42,10 @@ class ABRunner:
 
 def _agg(traj):
     from .metrics import Metrics
+
     agg = Metrics(mode=traj[0].mode if traj else "")
     for m in traj:
-        agg.messages += m.messages
-        agg.text_bytes += m.text_bytes
-        agg.text_tokens += m.text_tokens
-        agg.header_bytes += m.header_bytes
-        agg.nontext_transfers += m.nontext_transfers
-        agg.nontext_bytes += m.nontext_bytes
-        agg.fallbacks += m.fallbacks
-        agg.memory_queries += m.memory_queries
-        agg.memory_hits += m.memory_hits
-        agg.llm_tokens += m.llm_tokens
-        agg.latency_s += m.latency_s
-        agg.quality += m.quality
-        agg.tier_residual += m.tier_residual
-        agg.tier_embedding += m.tier_embedding
-        agg.tier_text += m.tier_text
-        agg.frozen_snapshot_injections += m.frozen_snapshot_injections
-        agg.result_spills += m.result_spills
+        agg.absorb(m)  # 全字段统一累加（V3-02：修复 llm_input/output_tokens 漏加导致的 0.0）
     if traj:
-        agg.quality /= len(traj)
+        agg.quality /= len(traj)  # quality 是每任务均值量：累加后取均值
     return agg
