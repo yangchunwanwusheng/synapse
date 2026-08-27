@@ -32,26 +32,32 @@ def _pick(d: dict, *keys):
 def _summary_from_result(res: dict) -> dict:
     """从各命令的 result 结构里抽关键聚合（结构历史多样，全部容错）。"""
     out: dict = {}
-    imp = (
-        res.get("improvement") or (res.get("result") or {}).get("improvement")
-        if isinstance(res, dict)
-        else {}
-    )
+    if not isinstance(res, dict):
+        return out
+    # 兼容三代结构：旧 signal 顶层 {linked,negative} / 旧 m7 顶层 result / v1.0 的 result 包裹层
+    nodes = [res]
+    if isinstance(res.get("result"), dict):
+        nodes.append(res["result"])
+    for key in ("linked", "negative"):
+        if isinstance(res.get(key), dict):
+            nodes.append(res[key])
+    imp = next((n["improvement"] for n in nodes if isinstance(n.get("improvement"), dict)), None)
     if isinstance(imp, dict):
         for k in ("llm_token_saved_pct", "wire_bytes_saved_pct", "transport_saved_pct"):
             if k in imp:
                 out[k] = imp[k]
     for side in ("text", "synapse", "text_total", "synapse_total"):
-        m = res.get(side) if isinstance(res, dict) else None
-        if isinstance(m, dict):
-            if side in ("text", "text_total"):
-                out.setdefault("text_f1", _pick(m, "quality"))
-                out.setdefault("text_llm_total_tokens", _pick(m, "llm_total_tokens"))
-            else:
-                out.setdefault("synapse_f1", _pick(m, "quality"))
-                out.setdefault("synapse_llm_total_tokens", _pick(m, "llm_total_tokens"))
+        for node in nodes:
+            m = node.get(side)
+            if isinstance(m, dict):
+                if side in ("text", "text_total"):
+                    out.setdefault("text_f1", _pick(m, "quality"))
+                    out.setdefault("text_llm_total_tokens", _pick(m, "llm_total_tokens"))
+                else:
+                    out.setdefault("synapse_f1", _pick(m, "quality"))
+                    out.setdefault("synapse_llm_total_tokens", _pick(m, "llm_total_tokens"))
     for k in ("n_items", "n_conversations", "rounds", "gold_recall"):
-        if isinstance(res, dict) and k in res:
+        if k in res:
             out[k] = res[k]
     return out
 
@@ -101,9 +107,11 @@ def main() -> int:
         return 2
     idx = index_runs(args.runs_dir)
     out = os.path.join(args.runs_dir, "index.json")
-    with open(out, "w", encoding="utf-8", newline="\n") as f:
+    tmp = out + ".tmp"
+    with open(tmp, "w", encoding="utf-8", newline="\n") as f:
         json.dump(idx, f, ensure_ascii=False, indent=2)
         f.write("\n")
+    os.replace(tmp, out)  # 原子替换：读者不会看到半截索引（sidecar 自身可再生，非 run evidence）
     n_mf = sum(1 for r in idx["runs"] if r.get("has_manifest"))
     print(f"indexed {idx['n_runs']} runs ({n_mf} with manifest v1, {idx['n_runs'] - n_mf} legacy) -> {out}")
     return 0

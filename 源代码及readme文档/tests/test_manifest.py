@@ -13,6 +13,7 @@
 平面级测试纯 stdlib；模式级经 smolagents 基座，在 .venv 跑：uv run pytest
 """
 
+import json
 import os
 import sys
 from types import SimpleNamespace
@@ -70,14 +71,8 @@ def test_logical_bytes_identity():
         msg.header_bytes() + msg.text_bytes() + msg.meta.get("nontext_bytes", 0) for msg in msgs
     )
     assert m.wire_bytes == m.logical_bytes  # 向后兼容别名
-
-
-def test_transport_ge_logical():
-    # to_wire() 含 capability/meta/text 等全部字段 → 传输口径 ≥ 逻辑口径（分离才有意义）
-    m = Metrics()
-    for msg in _msgs():
-        m.record_message(msg)
-    assert m.transport_bytes >= m.logical_bytes
+    # 注意：transport 与 logical 无大小恒等式——to_wire() 帧只含 CAS 句柄而 logical 计入
+    # 残差 payload 全量（真实 API 路径实测 transport < logical），两口径各自独立守恒即可。
 
 
 def test_agg_conservation_all_fields():
@@ -112,40 +107,60 @@ def test_metrics_absorb_conservation():
 
 
 def test_usage_missing_fails():
-    # 真实后端响应缺 token_usage → 显式 fail（禁止静默计 0 污染计量）
-    try:
-        require_token_usage(SimpleNamespace(token_usage=None))
-        raise AssertionError("usage 缺失应 raise")
-    except RuntimeError as e:
-        assert "token_usage" in str(e)
+    # 真实后端响应缺 token_usage / usage 壳但字段不可用 → 全部显式 fail（审查 P0-3）
+    bad_msgs = [
+        SimpleNamespace(token_usage=None),  # 整个 usage 缺失
+        SimpleNamespace(token_usage=object()),  # 有壳无字段
+        SimpleNamespace(token_usage=SimpleNamespace(input_tokens=3)),  # 缺 output_tokens
+        SimpleNamespace(token_usage=SimpleNamespace(input_tokens=None, output_tokens=5)),  # 字段 None
+        SimpleNamespace(token_usage=SimpleNamespace(input_tokens=True, output_tokens=5)),  # bool 冒充 int
+        SimpleNamespace(token_usage=SimpleNamespace(input_tokens=-1, output_tokens=5)),  # 负数
+        SimpleNamespace(token_usage=SimpleNamespace(input_tokens="15", output_tokens="5")),  # 字符串
+    ]
+    for msg in bad_msgs:
+        try:
+            require_token_usage(msg)
+            raise AssertionError(f"不可用 usage 应 raise: {msg.token_usage!r}")
+        except RuntimeError:
+            pass
+    # 完整合法 usage 正常通过
+    ok = SimpleNamespace(token_usage=SimpleNamespace(input_tokens=15, output_tokens=3))
+    assert require_token_usage(ok) is ok.token_usage
 
 
 def test_config_fail_fast(tmp_path):
-    # P1-6：YAML 语法错 / 未知键 / 文件不存在 / 类型错 → ConfigError，绝不静默回默认
+    # P1-6：YAML 语法错 / 未知键 / 文件不存在 / 类型错 / null / bool 冒充 / 坏 seed 元素 /
+    # 目录当配置 → 全部 ConfigError，绝不静默回默认（审查 P0-2 扩充）
+    from synapse.config import load_config
+
     bad_yaml = tmp_path / "bad.yaml"
     bad_yaml.write_text("llm_backend: [unclosed", encoding="utf-8")
-    for path, content in [
+    cases = [
         (bad_yaml, None),
         (tmp_path / "unknown.yaml", "not_a_field: 1\n"),
         (tmp_path / "missing.yaml", None),
         (tmp_path / "typeerr.yaml", "rounds: not_a_number\n"),
-    ]:
+        (tmp_path / "null.yaml", "rounds: null\n"),
+        (tmp_path / "boolint.yaml", "rounds: true\n"),
+        (tmp_path / "seednull.yaml", "seeds: null\n"),
+        (tmp_path / "seedbad.yaml", 'seeds: [1, "x"]\n'),
+        (tmp_path / "dir.yaml", None),  # 目录而非文件
+    ]
+    for path, content in cases:
         if content is not None:
             path.write_text(content, encoding="utf-8")
+        elif path.name == "dir.yaml":
+            path.mkdir(exist_ok=True)
         try:
-            from synapse.config import load_config
-
             load_config(str(path))
             raise AssertionError(f"应 ConfigError: {path}")
         except ConfigError:
             pass
     # 合法配置不受影响
     good = tmp_path / "good.yaml"
-    good.write_text("llm_backend: paratera\nrounds: 7\n", encoding="utf-8")
-    from synapse.config import load_config
-
+    good.write_text("llm_backend: paratera\nrounds: 7\nseeds: [0, 1]\n", encoding="utf-8")
     cfg = load_config(str(good))
-    assert cfg.llm_backend == "paratera" and cfg.rounds == 7
+    assert cfg.llm_backend == "paratera" and cfg.rounds == 7 and cfg.seeds == (0, 1)
 
 
 def test_hash_embedder_request_counter():
@@ -194,7 +209,7 @@ def test_write_run_schema_valid(tmp_path):
         dataset=dataset_info("data/x.json", 2),
         root=str(tmp_path),
     )
-    doc = __import__("json").load(open(os.path.join(out_dir, "result.json"), encoding="utf-8"))
+    doc = json.load(open(os.path.join(out_dir, "result.json"), encoding="utf-8"))
     assert validate_run_result(doc) == []
     assert doc["manifest"]["code_sha"]  # git 仓库内执行时应锚定 code SHA
     assert (
@@ -204,39 +219,82 @@ def test_write_run_schema_valid(tmp_path):
     assert "config" in doc and "result" in doc
 
 
+def _mini_manifest(command: str = "x") -> dict:
+    """schema 合法的最小 manifest（新契约必填键齐全）。"""
+    return {
+        "command": command,
+        "started_utc": "2026-08-27T12:00:00+00:00",
+        "schema_version": "1.0.0",
+        "code_sha": "a" * 40,
+        "git_status": "ok",
+        "code_dirty": False,
+        "config": {"model": "m", "temperature": 0},
+        "model": "m",
+        "embed_model": "e",
+        "llm_backend": "mock",
+        "embedder": "hash",
+        "temperature": 0,
+        "seed": None,
+        "dataset": None,
+        "env": {"os": "o", "python": "p"},
+    }
+
+
 def test_schema_rejects_broken_doc():
     assert validate_run_result({"result": {}})  # 缺顶层键 → 报错
     assert validate_run_result(
         {
             "schema_version": "1.0.0",
             "config": {},
-            "manifest": {
-                "command": "x",
-                "started_utc": "t",
-                "schema_version": "1.0.0",
-                "config": {"model": "m", "temperature": 0},
-                "env": {"os": "o", "python": "p"},
-            },
+            "manifest": _mini_manifest(),
             "result": {"text": {"messages": 1}},
         }
     )  # metrics 缺 V3-02 计量字段 → 报错
+    # 失败 run：显式 status=error + error 字符串 → 豁免 metrics 契约
     assert (
         validate_run_result(
             {
                 "schema_version": "1.0.0",
                 "config": {},
-                "manifest": {
-                    "command": "probe",
-                    "started_utc": "t",
-                    "schema_version": "1.0.0",
-                    "config": {"model": "m", "temperature": 0},
-                    "env": {"os": "o", "python": "p"},
-                },
-                "result": {"status": "error", "raw_error": "..."},
+                "manifest": _mini_manifest("probe"),
+                "result": {"status": "error", "error": "e2e: boom"},
             }
         )
         == []
     )  # 失败 run 豁免
+    # 收紧：仅有 raw_error 键而无显式 status/error 字段 → 不豁免（审查 P1-1）
+    assert validate_run_result(
+        {
+            "schema_version": "1.0.0",
+            "config": {},
+            "manifest": _mini_manifest("probe"),
+            "result": {"raw_error": "..."},
+        }
+    )
+    # 恒等式复算：logical != header+text+nontext → 报错
+    m = _mini_manifest()
+    bad = dict(_full_metrics(), logical_bytes=999)
+    assert validate_run_result(
+        {"schema_version": "1.0.0", "config": {}, "manifest": m, "result": {"text": bad}}
+    )
+
+
+def _full_metrics() -> dict:
+    return {
+        "llm_input_tokens": 10,
+        "llm_output_tokens": 2,
+        "transport_bytes": 50,
+        "wire_bytes": 40,
+        "logical_bytes": 40,
+        "header_bytes": 10,
+        "text_bytes": 20,
+        "nontext_bytes": 10,
+        "embed_requests": 1,
+        "embed_cache_hits": 0,
+        "embed_input_tokens": 3,
+        "cas_writes": 1,
+        "cas_write_bytes": 30,
+    }
 
 
 def test_hotpot_per_item_layer():
@@ -289,6 +347,76 @@ def test_synapse_mode_embed_cas_deltas():
     r2 = s.run_task(T.g1_family(1)[0])
     assert r1["metrics"].embed_requests > 0 and r1["metrics"].cas_writes > 0
     assert r2["metrics"].cas_writes > 0
+
+
+def test_abl_no_memory_counters_non_negative():
+    # abl_no_memory 每任务重置 CAS/store（审查 P1-8）：delta 计数不得为负
+    from dataclasses import replace as _replace
+
+    from synapse.modes.synapse_mode import SynapseSession
+
+    s = SynapseSession(_replace(Config(), abl_no_memory=True))
+    for _ in range(2):
+        m = s.run_task(T.g1_family(1)[0])["metrics"]
+        assert m.cas_writes >= 0 and m.cas_write_bytes >= 0
+        assert m.embed_requests >= 0 and m.embed_cache_hits >= 0
+
+
+def _write_hotpot_fixture(path) -> str:
+    items = [
+        {
+            "id": f"q{i}",
+            "question": f"who did thing {i}?",
+            "answer": f"person {i}",
+            "paragraphs": [{"title": f"P{j}", "text": f"fact {j} about person {i}"} for j in range(3)],
+            "gold_titles": ("P0",),
+            "level": "bridge",
+        }
+        for i in range(2)
+    ]
+    import json as _json
+
+    with open(path, "w", encoding="utf-8") as f:
+        _json.dump(items, f)
+    return str(path)
+
+
+def test_hotpot_stats_schema_contract(tmp_path):
+    # 审查 P0-1 回归：stats 命令的 result 必须能通过 schema 校验并成功落档
+    from synapse.eval.manifest import collect_manifest
+    from synapse.eval.schema import validate_run_result
+    from synapse.qa.harness import run_hotpot_stats
+
+    fx = _write_hotpot_fixture(tmp_path / "fixture.json")
+    res = run_hotpot_stats(Config(), n_items=2, repeats=2, path=fx)
+    doc = {
+        "schema_version": "1.0.0",
+        "config": Config().to_dict(),
+        "manifest": collect_manifest(
+            Config(), "hotpot-stats", dataset={"path": fx, "sha256": "x" * 64, "n_items": 2}
+        ),
+        "result": res,
+    }
+    errs = validate_run_result(doc)
+    assert errs == [], f"hotpot-stats payload 应过 schema: {errs}"
+    assert "text_total" in res and "synapse_total" in res  # 白名单命名（非 last_text/last_synapse）
+
+
+def test_coqa_per_item_turn_layer():
+    # 审查 P1-4：CoQA 逐 turn 展开层结构（qid 稳定、双模式预测与 F1 对齐）
+    from synapse.qa.dataset import Conversation, Turn
+    from synapse.qa.pipeline import run_synapse, run_text
+
+    conv = Conversation(
+        conv_id="c1",
+        source="s",
+        story="Alpha beta gamma delta story text here.",
+        turns=[Turn(idx=0, q="who is alpha?", gold="a person"), Turn(idx=1, q="and beta?", gold="another")],
+    )
+    cfg = Config()
+    rt, rs = run_text(conv, cfg), run_synapse(conv, cfg)
+    assert len(rt["preds"]) == len(rs["preds"]) == len(rs["golds"]) == 2
+    assert all(p is not None for p in rs["preds"])
 
 
 if __name__ == "__main__":

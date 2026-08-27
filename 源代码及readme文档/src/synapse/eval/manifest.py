@@ -53,16 +53,26 @@ def _package_version() -> str:
         return "unknown"
 
 
-def collect_manifest(cfg, command: str, dataset: dict | None = None, seed: int | None = None) -> dict:
-    """采集 run 元信息（落档时刻调用；dataset 形如 {"path","sha256","n_items"}）。"""
+def collect_manifest(
+    cfg,
+    command: str,
+    dataset: dict | None = None,
+    seed: int | None = None,
+    started_utc: str | None = None,
+) -> dict:
+    """采集 run 元信息；dataset 形如 {"path","sha256","n_items"}。
+
+    started_utc 由调用方在 **run 开始时**采集传入（审查 P1-2：落档时刻 != 开始时刻）；
+    缺省回退当前时刻（兼容旧调用方）。
+    """
     code_sha = _git(["rev-parse", "HEAD"])
     dirty = _git(["status", "--porcelain"]) is not None  # 非空输出=工作区有未提交改动
-    lock = os.path.join("uv.lock")
     return {
         "command": command,
-        "started_utc": datetime.now(timezone.utc).isoformat(timespec="seconds"),
+        "started_utc": started_utc or datetime.now(timezone.utc).isoformat(timespec="seconds"),
         "schema_version": SCHEMA_VERSION,
         "code_sha": code_sha,
+        "git_status": "ok" if code_sha else "unavailable",  # 审计可区分（审查 P2-2）
         "code_dirty": dirty,
         "config": cfg.to_dict(),  # 仅含配置字段与密钥环境变量名，无密钥值
         "model": cfg.model,
@@ -76,7 +86,7 @@ def collect_manifest(cfg, command: str, dataset: dict | None = None, seed: int |
             "os": platform.platform(),
             "python": sys.version.split()[0],
             "package_version": _package_version(),
-            "uv_lock_sha256": _file_sha256(lock),
+            "uv_lock_sha256": _file_sha256("uv.lock"),
             "collected_unix": int(time.time()),
         },
     }
@@ -90,20 +100,6 @@ def dataset_info(path: str, n_items: int | None = None) -> dict:
     return info
 
 
-def validate_and_write(out_dir: str, doc: dict) -> str:
-    """schema 校验（错误即抛，fail-fast 不写半成品）→ 写 result.json。"""
-    from .schema import validate_run_result
-
-    errors = validate_run_result(doc)
-    if errors:
-        raise ValueError("run result failed schema validation:\n  " + "\n  ".join(errors))
-    path = os.path.join(out_dir, "result.json")
-    with open(path, "w", encoding="utf-8", newline="\n") as f:
-        json.dump(doc, f, ensure_ascii=False, indent=2)
-        f.write("\n")
-    return path
-
-
 def write_run(
     tag: str,
     cfg,
@@ -113,27 +109,40 @@ def write_run(
     seed: int | None = None,
     per_item: list | None = None,
     root: str = "runs",
-    sub_second_unique: bool = True,
+    started_utc: str | None = None,
 ) -> str:
     """统一落档：runs/<tag>_<本地时间戳>/result.json（manifest + 聚合 + 可选逐题）。
 
-    返回 run 目录路径。目录名秒级时间戳冲突时追加 -2/-3（sub_second_unique）。
+    先在内存完成 schema 校验与序列化，再创建目录写入（审查 P1-7：校验失败不留空目录；
+    目录创建用 exist_ok=False 循环，避免并发同秒互相覆盖）。
+    started_utc 由调用方在 run 开始时采集传入（审查 P1-2）。
     """
-    stamp = datetime.now().strftime("%Y%m%d_%H%M%S")
-    out_dir = os.path.join(root, f"{tag}_{stamp}")
-    if sub_second_unique:
-        n = 2
-        while os.path.exists(out_dir):
-            out_dir = os.path.join(root, f"{tag}_{stamp}-{n}")
-            n += 1
-    os.makedirs(out_dir, exist_ok=True)
     doc = {
         "schema_version": SCHEMA_VERSION,
         "config": cfg.to_dict(),  # 向后兼容旧读取方（plot_* 脚本）
-        "manifest": collect_manifest(cfg, command, dataset=dataset, seed=seed),
+        "manifest": collect_manifest(cfg, command, dataset=dataset, seed=seed, started_utc=started_utc),
         "result": payload,
     }
     if per_item is not None:
         doc["per_item"] = per_item
-    validate_and_write(out_dir, doc)
+    # 内存内校验 + 序列化，全部成功后才碰文件系统
+    from .schema import validate_run_result
+
+    errors = validate_run_result(doc)
+    if errors:
+        raise ValueError("run result failed schema validation:\n  " + "\n  ".join(errors))
+    text = json.dumps(doc, ensure_ascii=False, indent=2) + "\n"
+
+    os.makedirs(root, exist_ok=True)
+    out_dir = os.path.join(root, f"{tag}_{datetime.now().strftime('%Y%m%d_%H%M%S')}")
+    n = 2
+    while True:
+        try:
+            os.mkdir(out_dir)  # 排他创建：并发同秒不会互相覆盖
+            break
+        except FileExistsError:
+            out_dir = os.path.join(root, f"{tag}_{datetime.now().strftime('%Y%m%d_%H%M%S')}-{n}")
+            n += 1
+    with open(os.path.join(out_dir, "result.json"), "w", encoding="utf-8", newline="\n") as f:
+        f.write(text)
     return out_dir

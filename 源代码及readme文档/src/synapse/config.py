@@ -69,8 +69,8 @@ def load_config(path: str | None = None) -> Config:
     """
     if not path:
         return Config()
-    if not os.path.exists(path):
-        raise ConfigError(f"配置文件不存在: {path}")
+    if not os.path.isfile(path):
+        raise ConfigError(f"配置文件不存在或不是普通文件（目录/不可读同样拒绝）: {path}")
     try:
         import yaml  # 可选依赖
     except ImportError as e:
@@ -80,6 +80,8 @@ def load_config(path: str | None = None) -> Config:
             data = yaml.safe_load(f) or {}
     except yaml.YAMLError as e:
         raise ConfigError(f"YAML 解析失败: {path}\n{e}") from e
+    except OSError as e:  # 权限/编码等 IO 层错误同样受控（审查 P0-2）
+        raise ConfigError(f"配置文件读取失败: {path}\n{e}") from e
     if not isinstance(data, dict):
         raise ConfigError(f"配置文件顶层必须是映射（键值对）: {path}")
     unknown = sorted(set(data) - set(Config.__dataclass_fields__))
@@ -96,14 +98,8 @@ class ConfigError(ValueError):
     """配置加载失败（fail-fast，不静默回退默认）。"""
 
 
-_TYPE_OK = {
-    "int": int,
-    "float": (int, float),
-    "str": str,
-    "bool": bool,
-    "tuple": (list, tuple),
-    "tuple[int, ...]": (list, tuple),
-}
+def _is_int(v) -> bool:
+    return type(v) is int  # 排除 bool（bool 是 int 子类；审查 P0-2：rounds: true 不得通过）
 
 
 def _check_types(path: str, data: dict) -> None:
@@ -112,6 +108,21 @@ def _check_types(path: str, data: dict) -> None:
     for f in dc.fields(Config):
         if f.name not in data:
             continue
-        want, val = _TYPE_OK.get(f.type), data[f.name]
-        if want and val is not None and not isinstance(val, want):
-            raise ConfigError(f"配置字段 {f.name} 期望 {f.type}，实得 {type(val).__name__}: {path}")
+        val = data[f.name]
+        if val is None:  # Config 无 Optional 字段：null 一律拒绝
+            raise ConfigError(f"配置字段 {f.name} 不接受 null: {path}")
+        t = f.type
+        if t == "int" and not _is_int(val):
+            raise ConfigError(f"配置字段 {f.name} 期望 int，实得 {type(val).__name__}: {path}")
+        if t == "float" and type(val) not in (int, float):
+            raise ConfigError(f"配置字段 {f.name} 期望数值，实得 {type(val).__name__}: {path}")
+        if t == "str" and not isinstance(val, str):
+            raise ConfigError(f"配置字段 {f.name} 期望 str，实得 {type(val).__name__}: {path}")
+        if t == "bool" and not isinstance(val, bool):
+            raise ConfigError(f"配置字段 {f.name} 期望 bool，实得 {type(val).__name__}: {path}")
+        if t == "tuple[int, ...]":
+            if not isinstance(val, (list, tuple)):
+                raise ConfigError(f"配置字段 {f.name} 期望列表，实得 {type(val).__name__}: {path}")
+            for el in val:
+                if not _is_int(el):
+                    raise ConfigError(f"配置字段 {f.name} 元素须为 int，实得 {type(el).__name__}: {path}")

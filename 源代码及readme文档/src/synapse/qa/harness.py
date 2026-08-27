@@ -44,9 +44,25 @@ def run_coqa(cfg, n_conv: int = 2, path: str = "data/coqa_sample.json") -> dict:
             }
         )
     tt, st = _agg(text_traj), _agg(syn_traj)
+    # 逐 turn 展开层（审查 P1-4：CoQA 也要可校验的第三层——qid 稳定、数组等长、F1 可复算）
+    per_item = []
+    for c in per:
+        for i in range(c["turns"]):
+            per_item.append(
+                {
+                    "qid": f"{c['conv_id']}:{i}",
+                    "question": c["questions"][i],
+                    "gold": c["golds"][i],
+                    "text_pred": c["text_preds"][i],
+                    "text_f1": c["text_f1_per_turn"][i],
+                    "synapse_pred": c["synapse_preds"][i],
+                    "synapse_f1": c["synapse_f1_per_turn"][i],
+                }
+            )
     return {
         "n_conversations": len(convs),
         "per_conversation": per,
+        "per_item": per_item,
         "text_total": tt.summary(),
         "synapse_total": st.summary(),
         "improvement": improvement(tt, st),
@@ -131,9 +147,11 @@ def run_hotpot_stats(cfg, n_items: int = 50, repeats: int = 3, path: str = "data
         "para_k": cfg.qa_para_k,
         "level_counts": {lv: levels.count(lv) for lv in sorted(set(levels))},
         "runs": runs,
-        # 末次 repeat 的双模式聚合（V3-02 计量契约：stats 命令的 result 也要过 schema 校验）
-        "last_text": tm.summary(),
-        "last_synapse": sm.summary(),
+        # 末次 repeat 的双模式聚合（V3-02 计量契约：stats 命令的 result 也要过 schema 校验；
+        # 命名须用 text_total/synapse_total 白名单——last_text/last_synapse 会被校验器漏识别）
+        "text_total": tm.summary(),
+        "synapse_total": sm.summary(),
+        "last_repeat_note": "text_total/synapse_total = 末次 repeat 的聚合",
         "token_saved": mean_std([r["token_saved"] for r in runs]),
         "text_f1": mean_std([r["text_f1"] for r in runs]),
         "syn_f1": mean_std([r["syn_f1"] for r in runs]),

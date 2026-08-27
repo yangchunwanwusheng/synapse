@@ -9,13 +9,30 @@ from __future__ import annotations
 import argparse
 import json
 import os
+import re
 import sys
 from dataclasses import replace
+from datetime import datetime, timezone
 
 from .config import Config, ConfigError, load_config
 from .eval.harness import ABRunner
 from .eval.manifest import dataset_info, write_run
 from . import tasks as T
+
+
+def _utc_now() -> str:
+    """run 开始时刻（ISO UTC 秒精度；传给 manifest，见审查 P1-2）。"""
+    return datetime.now(timezone.utc).isoformat(timespec="seconds")
+
+
+def _sanitize_error(e: BaseException) -> str:
+    """异常文本脱敏后入档（审查 P1-5：repr 可能带 endpoint/凭据回显）。"""
+    s = str(e)
+    s = re.sub(r"sk-[A-Za-z0-9_\-]{8,}", "sk-***", s)
+    s = re.sub(r"(Bearer\s+)[^\s'\"]+", r"\1***", s, flags=re.I)
+    s = re.sub(r"([?&](api_?key|token|key)=)[^&\s'\"]+", r"\1***", s, flags=re.I)
+    s = re.sub(r"(https?://[^:/@\s]+):([^@\s]+)@", r"\1:***@", s)
+    return s[:500]
 
 
 def _cmd_desc(args, name: str) -> str:
@@ -43,9 +60,18 @@ def _cmd_desc(args, name: str) -> str:
     return " ".join(parts)
 
 
-def _write_run(tag, cfg, payload, command, dataset=None, seed=None, per_item=None) -> str:
+def _write_run(tag, cfg, payload, command, dataset=None, seed=None, per_item=None, started_utc=None) -> str:
     """V3-02 统一落档：manifest + 聚合（+可选逐题）+ schema 校验。"""
-    out_dir = write_run(tag, cfg, payload, command, dataset=dataset, seed=seed, per_item=per_item)
+    out_dir = write_run(
+        tag,
+        cfg,
+        payload,
+        command,
+        dataset=dataset,
+        seed=seed,
+        per_item=per_item,
+        started_utc=started_utc,
+    )
     print(f"  artifacts -> {out_dir}/result.json")
     return out_dir
 
@@ -80,6 +106,7 @@ def _real_cfg(args):
 
 def cmd_smoke(_args) -> int:
     """离线 mock smoke：验证双模式跑通 + 残差节省 + 记忆复用 + 负例区分度。"""
+    t0 = _utc_now()
     cfg = Config()  # mock LLM + hash embedder，全离线
 
     linked = ABRunner(cfg).run(T.linked_continuous(3, 3))
@@ -118,6 +145,7 @@ def cmd_smoke(_args) -> int:
         cfg,
         {"linked": linked, "negative": negative, "checks": {k: bool(v) for k, v in checks.items()}},
         command="smoke",
+        started_utc=t0,
     )
     if failed:
         print(f"SMOKE FAILED: {failed}")
@@ -127,15 +155,17 @@ def cmd_smoke(_args) -> int:
 
 
 def cmd_ab(args) -> int:
+    t0 = _utc_now()
     cfg = load_config(args.config)
     res = ABRunner(cfg).run(T.linked_continuous(args.rounds, args.rounds))
     print(json.dumps(res, ensure_ascii=False, indent=2))
-    _write_run("ab", cfg, res, command=_cmd_desc(args, "ab"))
+    _write_run("ab", cfg, res, command=_cmd_desc(args, "ab"), started_utc=t0)
     return 0
 
 
 def cmd_probe(args) -> int:
     """输出形态探针：真实 API 接通前确认①鉴权②输出非 thinking③CodeAct 可解析④token 计数。"""
+    t0 = _utc_now()
     cfg = _real_cfg(args)
     if cfg is None:
         return 2
@@ -152,14 +182,14 @@ def cmd_probe(args) -> int:
     # 1) 原始生成：看输出形态（是否夹带 <think> 块 → 破坏结构化解析）
     from .runtime.model import make_model
 
-    mdl = make_model(cfg, "retriever")
     try:
+        mdl = make_model(cfg, "retriever")
         msg = mdl.generate([{"role": "user", "content": "Reply with exactly: PROBE_OK"}])
-    except Exception as e:  # noqa: BLE001  探针需暴露任何后端错误
-        print("[raw.generate] ERROR:", repr(e))
+    except Exception as e:  # noqa: BLE001  探针需暴露任何后端错误（含构造期：缺 extra/密钥）
+        print("[raw.generate] ERROR:", _sanitize_error(e))
         payload["status"] = "error"
-        payload["raw_error"] = repr(e)
-        _write_run("probe", cfg, payload, command=_cmd_desc(args, "probe"))
+        payload["error"] = f"raw.generate: {_sanitize_error(e)}"
+        _write_run("probe", cfg, payload, command=_cmd_desc(args, "probe"), started_utc=t0)
         return 1
     content = msg.content or ""
     print("[raw.generate] content[:200]=", repr(content[:200]))
@@ -178,10 +208,10 @@ def cmd_probe(args) -> int:
         import traceback
 
         traceback.print_exc()
-        print("[e2e] ERROR:", repr(e))
+        print("[e2e] ERROR:", _sanitize_error(e))
         payload["status"] = "error"
-        payload["e2e_error"] = repr(e)
-        _write_run("probe", cfg, payload, command=_cmd_desc(args, "probe"))
+        payload["error"] = f"e2e: {_sanitize_error(e)}"
+        _write_run("probe", cfg, payload, command=_cmd_desc(args, "probe"), started_utc=t0)
         return 1
     mm = out["metrics"]
     print("[e2e] conclusion[:160]=", repr((out["conclusion"] or "")[:160]))
@@ -194,7 +224,7 @@ def cmd_probe(args) -> int:
     payload["conclusion_head"] = (out["conclusion"] or "")[:160]
     payload["checksum_ok"] = out["checksum_ok"]
     payload["e2e_metrics"] = mm.summary()
-    _write_run("probe", cfg, payload, command=_cmd_desc(args, "probe"))
+    _write_run("probe", cfg, payload, command=_cmd_desc(args, "probe"), started_utc=t0)
     return 0 if ok else 1
 
 
@@ -211,6 +241,7 @@ def _half_means(contr):
 
 def cmd_signal(args) -> int:
     """signal 轮：真实 API 跑 G1(关联) + 负例族(因果对照)，synapse vs text，存档 + 字节节省判定 + 区分度。"""
+    t0 = _utc_now()
     cfg = _real_cfg(args)
     if cfg is None:
         return 2
@@ -222,7 +253,13 @@ def cmd_signal(args) -> int:
     )
     linked = ABRunner(cfg).run(T.g1_family(args.rounds, topic=args.topic))
     negative = ABRunner(cfg).run(T.negative_family(min(args.rounds, 6)))
-    _write_run("signal", cfg, {"linked": linked, "negative": negative}, command=_cmd_desc(args, "signal"))
+    _write_run(
+        "signal",
+        cfg,
+        {"linked": linked, "negative": negative},
+        command=_cmd_desc(args, "signal"),
+        started_utc=t0,
+    )
 
     imp = linked["improvement"]
     lc, nc = linked["contraction_bytes"], negative["contraction_bytes"]
@@ -286,6 +323,7 @@ def cmd_m7(args) -> int:
 
     验证 G2 复用 G1 累积的共享记忆 → G2 每任务字节更低、命中率从首个任务即高（跨组复用）。
     """
+    t0 = _utc_now()
     cfg = _real_cfg(args)
     if cfg is None:
         return 2
@@ -298,7 +336,8 @@ def cmd_m7(args) -> int:
     syn = res["synapse_trajectory"]
     g1s = _group_stats(syn[: args.g1])
     g2s = _group_stats(syn[args.g1 :])
-    _write_run("m7", cfg, {"result": res, "g1": g1s, "g2": g2s}, command=_cmd_desc(args, "m7"))
+    # payload 平铺（审查 P1-3）：保住 result.contraction_bytes / synapse_trajectory 的旧读取路径
+    _write_run("m7", cfg, {**res, "g1": g1s, "g2": g2s}, command=_cmd_desc(args, "m7"), started_utc=t0)
 
     print(json.dumps({"G1": g1s, "G2": g2s, "improvement": res["improvement"]}, ensure_ascii=False, indent=2))
     # M7 跨组复用：G2（暖启动，复用 G1）每任务字节 ≤ G1（含冷启动）且命中率 ≥ G1
@@ -313,12 +352,14 @@ def cmd_m7(args) -> int:
 
 def cmd_coqa(args) -> int:
     """真实数据集(CoQA)对话式 QA：text 基线 vs synapse，统计真实 LLM token + F1 + 记忆复用。"""
+    t0 = _utc_now()
     cfg = _real_cfg(args)
     if cfg is None:
         return 2
     cfg = replace(cfg, embedder=args.embedder, qa_sentences_k=args.k)
     from .qa.harness import run_coqa
 
+    ds = dataset_info("data/coqa_sample.json", args.convs)  # run 前锚定数据集版本（审查 P1-2）
     print(
         f"== CoQA: model={cfg.model} embedder={cfg.embedder} k={cfg.qa_sentences_k} "
         f"convs={args.convs} (每段=1组关联连续任务) =="
@@ -329,7 +370,9 @@ def cmd_coqa(args) -> int:
         cfg,
         res,
         command=_cmd_desc(args, "coqa"),
-        dataset=dataset_info("data/coqa_sample.json", args.convs),
+        dataset=ds,
+        per_item=res.get("per_item"),
+        started_utc=t0,
     )
 
     imp, tt, st = res["improvement"], res["text_total"], res["synapse_total"]
@@ -375,6 +418,7 @@ def cmd_hotpot(args) -> int:
     设计：HotpotQA 每题 10 段含 8 段干扰，无状态 LLM 基线每轮重传全部 → synapse 只检索相关段，
     砍掉"被重传却无关的上下文"。诚实口径：真实 LLM token + 词级 F1 + 金标召回。
     """
+    t0 = _utc_now()
     cfg = _real_cfg(args)
     if cfg is None:
         return 2
@@ -383,6 +427,7 @@ def cmd_hotpot(args) -> int:
     )
     from .qa.harness import run_hotpot
 
+    ds = dataset_info("data/hotpot_sample.json", args.n)  # run 前锚定数据集版本（审查 P1-2）
     print(
         f"== HotpotQA: model={cfg.model} embedder={cfg.embedder} para_k={cfg.qa_para_k} "
         f"retrieval={cfg.qa_retrieval} items={args.n} (每题 10 段=2 金标+8 干扰) =="
@@ -393,8 +438,9 @@ def cmd_hotpot(args) -> int:
         res,
         "hotpot",
         command=_cmd_desc(args, "hotpot"),
-        dataset=dataset_info("data/hotpot_sample.json", args.n),
+        dataset=ds,
         seed=getattr(args, "seed", None),
+        started_utc=t0,
     )
 
 
@@ -402,6 +448,7 @@ def cmd_musique(args) -> int:
     """真实数据集(MuSiQue)多文档 QA：与 HotpotQA 同结构但每题 20 段（干扰更密）。
     复用 run_hotpot 逻辑，只切换数据路径。P0-2 第二数据集交叉验证。
     """
+    t0 = _utc_now()
     cfg = _real_cfg(args)
     if cfg is None:
         return 2
@@ -410,6 +457,7 @@ def cmd_musique(args) -> int:
     )
     from .qa.harness import run_hotpot
 
+    ds = dataset_info("data/musique_sample.json", args.n)
     print(
         f"== MuSiQue: model={cfg.model} embedder={cfg.embedder} para_k={cfg.qa_para_k} "
         f"retrieval={cfg.qa_retrieval} items={args.n} (每题 20 段) =="
@@ -420,12 +468,15 @@ def cmd_musique(args) -> int:
         res,
         "musique",
         command=_cmd_desc(args, "musique"),
-        dataset=dataset_info("data/musique_sample.json", args.n),
+        dataset=ds,
         seed=getattr(args, "seed", None),
+        started_utc=t0,
     )
 
 
-def _print_hotpot_result(cfg, res, tag: str, command: str = "", dataset=None, seed=None) -> int:
+def _print_hotpot_result(
+    cfg, res, tag: str, command: str = "", dataset=None, seed=None, started_utc=None
+) -> int:
     """hotpot/musique 共用结果输出 + 落档。"""
     _write_run(
         tag,
@@ -435,6 +486,7 @@ def _print_hotpot_result(cfg, res, tag: str, command: str = "", dataset=None, se
         dataset=dataset,
         seed=seed,
         per_item=res.get("per_item"),
+        started_utc=started_utc,
     )
     imp, tt, st = res["improvement"], res["text"], res["synapse"]
     print(
@@ -476,12 +528,14 @@ def _print_hotpot_result(cfg, res, tag: str, command: str = "", dataset=None, se
 
 def cmd_hotpot_stats(args) -> int:
     """HotpotQA 统计稳健化：N 题 × R 次重复 → token 省/F1 的 mean±std + 配对 Δ 95% CI + 胜负。"""
+    t0 = _utc_now()
     cfg = _real_cfg(args)
     if cfg is None:
         return 2
     cfg = replace(cfg, embedder=args.embedder, qa_para_k=args.k)
     from .qa.harness import run_hotpot_stats
 
+    ds = dataset_info("data/hotpot_sample.json", args.n)
     print(
         f"== HotpotQA-STATS: model={cfg.model} embedder={cfg.embedder} para_k={cfg.qa_para_k} "
         f"N={args.n} × R={args.repeats} =="
@@ -492,7 +546,8 @@ def cmd_hotpot_stats(args) -> int:
         cfg,
         res,
         command=_cmd_desc(args, "hotpot-stats"),
-        dataset=dataset_info("data/hotpot_sample.json", args.n),
+        dataset=ds,
+        started_utc=t0,
     )
 
     ts, tf, sf, gr = res["token_saved"], res["text_f1"], res["syn_f1"], res["gold_recall"]
@@ -598,6 +653,9 @@ def main(argv=None) -> int:
     except ConfigError as e:  # fail-fast（P1-6）：配置错误明确报错退出，绝不静默回默认
         print(f"[ERR] 配置加载失败: {e}")
         return 2
+    except RuntimeError as e:  # 计量地基失败（如 usage 缺失，审查 P1-5）：受控退出不裸崩
+        print(f"[ERR] {_sanitize_error(e)}")
+        return 1
 
 
 if __name__ == "__main__":
