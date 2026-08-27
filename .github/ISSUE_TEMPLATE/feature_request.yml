@@ -1,0 +1,45 @@
+name: 功能或机制提案
+description: 提议与赛题、系统机制或工程质量直接相关的能力
+title: "[Feature] "
+labels: ["enhancement", "triage"]
+body:
+  - type: textarea
+    id: motivation
+    attributes:
+      label: 问题与动机
+      description: 先说明用户、评审或开发流程中的真实问题，不要只写解决方案名称。
+    validations:
+      required: true
+  - type: dropdown
+    id: score
+    attributes:
+      label: 对应赛题维度
+      options:
+        - 通信效率（25）
+        - 状态传递创新（20）
+        - 记忆复用效果（20）
+        - 系统完整性（20）
+        - 实验验证（15）
+        - 团队工程化
+    validations:
+      required: true
+  - type: textarea
+    id: proposal
+    attributes:
+      label: 最小可交付方案
+      description: 描述接口、数据流、失败模式和不做什么。
+    validations:
+      required: true
+  - type: textarea
+    id: acceptance
+    attributes:
+      label: 验收证据
+      description: 写出可自动测试或可复现实验验证的客观标准。
+    validations:
+      required: true
+  - type: textarea
+    id: risks
+    attributes:
+      label: 风险与替代方案
+      description: 包括兼容性、复杂度、性能、统计或叙事风险。
+

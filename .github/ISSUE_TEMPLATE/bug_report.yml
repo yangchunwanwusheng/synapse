@@ -1,0 +1,45 @@
+name: 缺陷报告
+description: 报告可复现的代码、测试、部署或实验问题
+title: "[Bug] "
+labels: ["bug", "triage"]
+body:
+  - type: textarea
+    id: problem
+    attributes:
+      label: 问题描述
+      description: 说明实际行为、期望行为及影响范围。
+    validations:
+      required: true
+  - type: textarea
+    id: reproduce
+    attributes:
+      label: 最小复现步骤
+      description: 给出命令、配置、输入和出现问题的最短步骤；不要粘贴密钥。
+      placeholder: |
+        1. 进入源代码目录
+        2. 执行 ...
+        3. 观察到 ...
+    validations:
+      required: true
+  - type: textarea
+    id: evidence
+    attributes:
+      label: 证据
+      description: 附关键日志、堆栈、截图或失败测试名称，并删除敏感信息。
+    validations:
+      required: true
+  - type: input
+    id: environment
+    attributes:
+      label: 环境
+      description: 操作系统、Python、uv、提交 SHA；openEuler 问题请写明具体版本。
+    validations:
+      required: true
+  - type: textarea
+    id: acceptance
+    attributes:
+      label: 验收标准
+      description: 修复后必须满足的可观察行为和回归测试。
+    validations:
+      required: true
+
