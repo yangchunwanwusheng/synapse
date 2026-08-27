@@ -1,7 +1,7 @@
-# SYNAPSE — openEuler 24.03-LTS 部署镜像（赛题 M10：openEuler 可编译运行测试红线）
+# SYNAPSE — openEuler 24.03-LTS-SP3 部署镜像（赛题 M10 指定版本）
 # 基座 smolagents 为纯 Python 轻依赖（无 torch/transformers/langchain）→ openEuler 友好、镜像小。
 # 默认入口 = 离线自检（零网络/零密钥，评审 `docker run` 即见 PASS）；真实实验经 .env 注入密钥。
-FROM openeuler/openeuler:24.03-lts
+FROM openeuler/openeuler:24.03-lts-sp3
 
 # 系统层：Python 3.11（openEuler 24.03 自带）+ pip + shadow-utils（useradd，最小镜像默认无）
 RUN dnf install -y python3 python3-pip shadow-utils && dnf clean all
@@ -18,7 +18,7 @@ WORKDIR /app
 COPY pyproject.toml uv.lock README.md ./
 COPY src ./src
 # 核心(smolagents) + api(openai，真实 Paratera 路径)；不装 embed/vector(torch/faiss 重)，默认 hash 嵌入
-RUN uv sync --frozen --no-dev --extra api
+RUN uv sync --frozen --no-dev --extra api --no-editable
 
 COPY configs ./configs
 COPY tests ./tests
