@@ -9,6 +9,7 @@
 from __future__ import annotations
 
 import time
+import uuid
 
 from ..config import Config
 from ..runtime.team import build_team, _make_verify_check_fn
@@ -22,7 +23,7 @@ from ..stateplane.residual import (
     quantize_vec,
     serialize_base,
 )
-from ..stateplane.checksum import digest_packet, verify_packet
+from ..stateplane.checksum import digest_bytes, digest_packet, verify_packet
 from ..stateplane.vector_index import VectorIndex
 from ..stateplane.cas import CAS
 from ..memory.store import MemoryStore
@@ -46,7 +47,8 @@ class SynapseSession:
         self.codec = ResidualCodec(cfg)
         self.cas = CAS()
         self.vec_index = VectorIndex()  # V3-04：文本句柄↔量化向量（接收方恢复面）
-        self.generation = 0  # V3-04：任务代（L1 防跨代重放）
+        self.generation = 0  # V3-04：任务代（L1 绑定任务代，检测跨代陈旧 packet）
+        self.session_id = uuid.uuid4().hex[:16]  # V3-04：L1 会话域（防跨会话重放）
         self.consolidator = Consolidator(cfg)
 
     def run_task(self, task) -> dict:
@@ -58,6 +60,7 @@ class SynapseSession:
             if hasattr(self.store, "_prototypes"):
                 self.store._prototypes.clear()
             self.cas = CAS()  # 重置内容寻址存储
+            self.vec_index = VectorIndex()  # 恢复面同步重置（审查 P2-4：防悬空句柄污染消融口径）
         team = self.team
         team.bind_topic(task.topic)
         m = Metrics(mode="synapse")
@@ -109,11 +112,11 @@ class SynapseSession:
         text_handle = self.cas.put(evidence.encode("utf-8"))
 
         if getattr(cfg, "residual_true_path", False):
-            # V3-04 真通路：CNR 协商驱动 + 诚实三档分叉 + 两级校验 + 恢复消费 + 回退链。
-            # 接收方仅凭句柄可见内容（residual 字节 / 序列化基 / 向量索引）重建并消费；
-            # 全文只经回退通道（见 docs/design/v3-04-true-path.md）。
+            # V3-04 真通路：CNR 协商驱动 + 诚实分档 + 两级校验 + 恢复消费 + 逐跳回退链。
+            # 接收方仅凭线缆帧字段重建并消费（mem_id 记忆解析基 / 向量索引检索恢复）；
+            # 全文只经 text 帧通道（见 docs/design/v3-04-true-path.md）。
             recv_text, nnz, verified = self._true_path_transfer(
-                sched, m, evidence, Y, b_hat, base_sim, text_handle, retr, summ
+                sched, m, evidence, Y, b_hat, base_sim, base_id, text_handle, retr, summ
             )
             ok = verified
         else:
@@ -155,6 +158,7 @@ class SynapseSession:
             yq_hat = self.codec.decode(pkt, b_hat)
             ok = True if cfg.abl_no_checksum else self.codec.verify(yq_hat, Y_true)
             if not ok:  # 校验不符（预测基失配/裁剪失真）→ 回退取全量文本（切到协议 text 档）
+                m.fallback_events += 1  # V3-04 口径分列：旧路径一次失败=1 event=1 step
                 sched.send(
                     Message(
                         sched.next_msg_id(),
@@ -178,7 +182,6 @@ class SynapseSession:
 
         # 执行（真·CodeAct，结构化结果）；§2.3 result 超预算则 spill 到 CAS 句柄 + 短摘要
 
-        # 执行（真·CodeAct，结构化结果）；§2.3 result 超预算则 spill 到 CAS 句柄 + 短摘要
         exec_res = execu.run(execute_prompt(), reset=True, additional_args={"evidence": evidence})
         exec_result, spill_handles = spill_result({"metric": exec_res}, self.cas)
         sched.send(
@@ -245,113 +248,119 @@ class SynapseSession:
             "conclusion": conclusion,
             "nnz": nnz,
             "checksum_ok": ok,
+            # 真通路补充口径：checksum_ok=首帧 L1+L2 是否通过；final_recovery_ok=最终是否恢复成功
+            # （回退后仍可为 True；旧路径无回退链，两者恒相等）
+            "final_recovery_ok": recv_text is not None,
         }
 
     # ---------------- V3-04 真通路（Issue #148746，docs/design/v3-04-true-path.md） ----------------
 
-    _TIER_RANK = {"residual": 2, "residual_zero": 2, "embedding": 1, "text": 0}
+    # 档位能力秩（与 CNR.ENCODING_RANK 对齐：hidden 为路线图能力，按最高秩放行）
+    _TIER_RANK = {"residual": 2, "residual_zero": 2, "embedding": 1, "text": 0, "hidden": 3}
 
     def _true_path_transfer(
-        self, sched, m, evidence, Y, b_hat, base_sim, text_handle, retr, summ
+        self, sched, m, evidence, Y, b_hat, base_sim, base_id, text_handle, retr, summ
     ) -> tuple[str, int, bool]:
-        """残差/VLC 真数据通路：CNR 驱动三档分叉发帧 + 接收方两级校验检索恢复 + 回退链。
+        """残差/VLC 真数据通路：CNR 驱动选档发帧 + 接收方从线缆帧字段恢复 + 逐跳回退链。
 
-        发送方：量化基入 CAS（base_handle）；向量可寻址索引 put(text_handle, 量化Y)；
-        按 消融/基强度/协商结果 选档真实分叉（residual | residual_zero | embedding | text）。
-        接收方：仅凭线缆可见内容（payload 字节 + base_handle + generation + 向量索引）——
-        L1 完整性（可复算哈希，拦篡改/损坏/重放）→ 按句柄解析基重构 Ŷ → L2 余弦检索恢复文本；
-        失败走回退链 残差→embedding→text（全文仅经回退通道）。
+        发送方：向量可寻址索引 put(text_handle, 量化Y)；率失真选档（残差 vs 全量向量取小）；
+        按 消融/基强度/协商限幅 真实分叉（residual | residual_zero | embedding | text）。
+        预测基只传 mem_id 句柄——接收方从自身共享记忆解析（记忆是解码端边信息），
+        不传基向量、不直接复用发送方 b_hat 对象。
+        接收方：_receive_frame 仅凭帧字段（payload_kind/handles/checksum/meta）驱动——
+        L1 完整性（可复算）→ 记忆解析基重构 → L2 余弦检索 + content_digest 身份校验恢复；
+        失败逐跳回退 残差→embedding→text（每跳都经构造帧→接收帧，不复用发送方局部变量）。
         返回 (恢复文本, nnz, 首帧两级校验是否通过)。
         """
         cfg = self.cfg
         gen = self.generation
+        Y_q = quantize_vec(Y, self.codec.grid)
+        vec_bytes = serialize_base(Y_q)  # embedding 档全量 packet（率失真比较 + 回退跳 1 共用）
+        full_vec_wire = len(vec_bytes) + 12
+        content_digest = digest_bytes(evidence.encode("utf-8"))
+        # 恢复面先行：文本句柄 ↔ 量化向量（接收方检索恢复的出口；帧本身不携带全文句柄）
+        self.vec_index.put(text_handle, Y_q)
+
         negotiated = sched.cnr.negotiate(retr.agent_id, summ.agent_id)  # R-P0-4：真实协商驱动选档
         has_base = b_hat is not None and base_sim > 0.0
         if cfg.abl_no_residual:
             intended = "embedding"  # R-P0-3：消融=真发全量向量 packet，数据路径分叉而非改账
-        elif has_base and base_sim >= cfg.verify_threshold:
-            intended = "residual"
-        elif has_base:
-            intended = "embedding"  # 弱基：全量量化向量（诚实分叉，不再"同一路径贴标签"）
-        else:
+        elif not has_base:
             intended = "residual_zero"  # 冷启动诚实标档：零基残差，收缩序列的合法起点
+        else:
+            # 率失真选档（审查修复：弱基不再无条件发全量）：残差超过全量向量才换 embedding，
+            # 保证 residual 路径字节恒不劣于 embedding 路径（signal KC-1 真实 API 回归的根因修复）
+            trial = self.codec.encode(Y, b_hat, base_id, gen)
+            intended = "residual" if trial.size_bytes() <= full_vec_wire else "embedding"
         cap = self._TIER_RANK.get(negotiated, 0)
         tier = intended if self._TIER_RANK[intended] <= cap else ("embedding" if cap >= 1 else "text")
 
-        # 恢复面先行：文本句柄 ↔ 量化向量（接收方检索恢复的出口）
-        Y_q = quantize_vec(Y, self.codec.grid)
-        self.vec_index.put(text_handle, Y_q)
+        def _checksum(payload: bytes, base_ref: str, pk: str) -> str:
+            return digest_packet(payload, base_ref, gen, self.session_id, pk, content_digest)
 
-        def _tell(payload_handle, base_ref, pk, checksum, nontext, nnz, tier_, fallback=False):
-            meta = {"nontext_bytes": nontext, "nnz": nnz, "tier": tier_, "generation": gen}
-            if fallback:
-                meta["fallback"] = True
-            sched.send(
-                Message(
-                    sched.next_msg_id(),
-                    retr.agent_id,
-                    summ.agent_id,
-                    ActionType.TELL.value,
-                    handles=(payload_handle, base_ref, text_handle),
-                    payload_kind=pk,
-                    checksum=checksum,
-                    meta=meta,
-                )
+        def _data_frame(payload_handle, base_ref, pk, checksum, nontext, nnz_, tier_):
+            return Message(
+                sched.next_msg_id(),
+                retr.agent_id,
+                summ.agent_id,
+                ActionType.TELL.value,
+                handles=(payload_handle, base_ref),
+                payload_kind=pk,
+                checksum=checksum,
+                meta={
+                    "nontext_bytes": nontext,
+                    "nnz": nnz_,
+                    "tier": tier_,
+                    "generation": gen,
+                    "content_digest": content_digest,
+                    "dim": len(Y_q),
+                },
             )
 
-        # --- 发送方按档构造线缆帧（真实分叉） ---
+        # --- 发送方：按档构造线缆帧（真实分叉；text 档=真文本帧，无向量载荷） ---
         nnz = 0
-        if tier in ("residual", "residual_zero"):
-            bq = quantize_vec(b_hat, self.codec.grid) if b_hat is not None else [0] * len(Y)
-            base_handle = self.cas.put(serialize_base(bq))  # 量化基入 CAS，接收方按句柄解析
-            pkt = self.codec.encode(Y, b_hat, base_handle, gen)
-            payload_handle = self.cas.put(pkt.residual)
-            payload_kind = "residual"
-            frame_checksum = pkt.checksum
-            _tell(payload_handle, base_handle, "residual", pkt.checksum, pkt.size_bytes(), pkt.nnz, tier)
-            nnz = pkt.nnz
-        else:
-            vec_bytes = serialize_base(Y_q)  # 全量量化向量（int16，dim×2B + 头4B + 校验8B）
-            payload_handle = self.cas.put(vec_bytes)
-            payload_kind = "embedding"
-            base_handle = ""
-            frame_checksum = digest_packet(vec_bytes, "", gen)
-            _tell(payload_handle, "", "embedding", frame_checksum, len(vec_bytes) + 12, len(Y_q), tier)
+        if tier == "text":
+            frame = Message(
+                sched.next_msg_id(),
+                retr.agent_id,
+                summ.agent_id,
+                ActionType.TELL.value,
+                payload_kind="text",
+                text=evidence,
+                checksum=_checksum(evidence.encode("utf-8"), "", "text"),
+                meta={"tier": "text", "generation": gen, "content_digest": content_digest},
+            )
+        elif tier == "embedding":
+            vec_handle = self.cas.put(vec_bytes)
+            frame = _data_frame(
+                vec_handle,
+                "",
+                "embedding",
+                _checksum(vec_bytes, "", "embedding"),
+                full_vec_wire,
+                len(Y_q),
+                "embedding",
+            )
             nnz = len(Y_q)
+        else:  # residual / residual_zero
+            base_ref = base_id if b_hat is not None else ""  # mem_id：接收方从自身记忆解析
+            pkt = self.codec.encode(Y, b_hat, base_ref, gen)
+            res_handle = self.cas.put(pkt.residual)
+            frame = _data_frame(
+                res_handle,
+                base_ref,
+                "residual",
+                _checksum(pkt.residual, base_ref, "residual"),
+                pkt.size_bytes(),
+                pkt.nnz,
+                tier,
+            )
+            nnz = pkt.nnz
+        sched.send(frame)
 
-        # --- 接收方恢复：L1 完整性（可复算）→ 按句柄解析基 → 重构 → L2 检索恢复 ---
-        strict = not cfg.abl_no_checksum
-
-        def _recover(yq) -> str | None:
-            hits = self.vec_index.search(yq, k=1)
-            if not hits:
-                return None
-            h, sim = hits[0]
-            if strict and sim < cfg.verify_threshold:  # L2 语义校验（基失配/裁剪失真）
-                return None
-            data = self.cas.get(h)
-            return data.decode("utf-8") if data is not None else None
-
-        recv_text = None
-        verified = False
-        payload_bytes = self.cas.get(payload_handle)
-        if payload_bytes is not None and (
-            not strict or verify_packet(payload_bytes, base_handle, gen, frame_checksum)  # L1
-        ):
-            if payload_kind == "residual":
-                bq_recv = deserialize_base(self.cas.get(base_handle) or b"")
-                yq_hat = self.codec.decode_bytes(payload_bytes, bq_recv, len(bq_recv))
-            else:
-                yq_hat = deserialize_base(payload_bytes)
-            recv_text = _recover(yq_hat)
-            if recv_text is not None:
-                verified = True
-                if payload_kind == "residual":
-                    m.recovery_residual += 1
-                else:
-                    m.recovery_embedding += 1
-
-        # --- 回退链：残差→embedding→text（每次降档重发计一次 fallback） ---
+        # --- 接收方：从线缆帧驱动（首帧 → 逐跳回退；每跳都经帧构造→帧接收） ---
+        recv_text, channel = self._receive_frame(frame, m)
+        verified = channel is not None
         if recv_text is None:
             sched.send(
                 Message(
@@ -362,34 +371,102 @@ class SynapseSession:
                     params={"reason": "verify_fail"},
                 )
             )
-            if payload_kind == "residual":
-                vec_bytes = serialize_base(Y_q)
-                vec_handle = self.cas.put(vec_bytes)
-                _tell(
-                    vec_handle,
+            m.fallback_events += 1
+            if frame.payload_kind == "residual":
+                # 跳 1：embedding 档（全量向量）——补发帧同样经接收路径消费
+                fb = _data_frame(
+                    self.cas.put(vec_bytes),
                     "",
                     "embedding",
-                    digest_packet(vec_bytes, "", gen),
-                    len(vec_bytes) + 12,
+                    _checksum(vec_bytes, "", "embedding"),
+                    full_vec_wire,
                     len(Y_q),
                     "embedding",
-                    fallback=True,
                 )
-                recv_text = _recover(Y_q)  # 全量向量精确命中索引项（sim=1）
-                if recv_text is not None:
-                    m.recovery_embedding += 1
+                fb.meta["fallback"] = True
+                sched.send(fb)
+                recv_text, _ch = self._receive_frame(fb, m)
             if recv_text is None:
-                sched.send(
-                    Message(
-                        sched.next_msg_id(),
-                        retr.agent_id,
-                        summ.agent_id,
-                        ActionType.TELL.value,
-                        payload_kind="text",
-                        text=evidence,
-                        meta={"fallback": True, "tier": "text", "generation": gen},
-                    )
+                # 跳 2：text 档——全文直传（唯一全文通道），接收方从帧 text 字段读取
+                fb2 = Message(
+                    sched.next_msg_id(),
+                    retr.agent_id,
+                    summ.agent_id,
+                    ActionType.TELL.value,
+                    payload_kind="text",
+                    text=evidence,
+                    checksum=_checksum(evidence.encode("utf-8"), "", "text"),
+                    meta={
+                        "fallback": True,
+                        "tier": "text",
+                        "generation": gen,
+                        "content_digest": content_digest,
+                    },
                 )
-                recv_text = evidence
-                m.recovery_text += 1
+                sched.send(fb2)
+                recv_text, _ch = self._receive_frame(fb2, m)
         return recv_text, nnz, verified
+
+    def _receive_frame(self, msg, m) -> tuple[str | None, str | None]:
+        """接收方恢复：仅凭线缆帧字段（payload_kind/handles/checksum/meta/text）驱动。
+
+        - text 帧：读帧内正文，content_digest 一致性校验后消费。
+        - residual/embedding 帧：L1 完整性（可复算哈希）→ residual 按句柄从自身记忆解析
+          预测基（缺失/维度不符→回退）→ 重构 → L2 余弦检索 + content_digest 身份校验。
+        任何失败返回 (None, None) 由调用方走回退链；畸形字节转 ValueError 受控回退不崩溃。
+        """
+        cfg = self.cfg
+        strict = not cfg.abl_no_checksum
+        meta = msg.meta or {}
+        gen = int(meta.get("generation", 0))
+        cd = meta.get("content_digest")
+        if msg.payload_kind == "text":
+            if msg.text is None:
+                return None, None
+            if strict and cd is not None and digest_bytes(msg.text.encode("utf-8")) != cd:
+                return None, None
+            m.recovery_text += 1
+            return msg.text, "text"
+        payload_handle, base_ref = (tuple(msg.handles) + ("",))[:2]
+        payload = self.cas.get(payload_handle)
+        if payload is None:
+            return None, None
+        if strict and not verify_packet(
+            payload, base_ref, gen, msg.checksum, self.session_id, msg.payload_kind, cd or ""
+        ):
+            return None, None
+        try:
+            if msg.payload_kind == "residual":
+                dim = int(meta.get("dim", 0))
+                if base_ref:  # 记忆是解码端边信息：接收方从自身 MemoryStore 解析预测基
+                    unit = self.store.get(base_ref)
+                    emb = unit.embedding if unit is not None else None
+                    if emb is None or len(emb) != dim:
+                        return None, None  # 基缺失/维度不符 → 受控回退
+                    bq_recv = quantize_vec(emb, self.codec.grid)
+                else:
+                    bq_recv = [0] * dim  # 零基冷启动
+                yq_hat = self.codec.decode_bytes(payload, bq_recv, dim)
+            elif msg.payload_kind == "embedding":
+                yq_hat = deserialize_base(payload)
+            else:
+                return None, None
+        except ValueError:
+            return None, None  # 畸形帧（非对齐长度/越界索引/奇数向量字节）→ 回退链
+        hits = self.vec_index.search(yq_hat, k=1)
+        if not hits:
+            return None, None
+        h, sim = hits[0]
+        if strict and sim < cfg.verify_threshold:  # L2 语义校验（基失配/裁剪失真）
+            return None, None
+        data = self.cas.get(h)
+        if data is None:
+            return None, None
+        # 身份校验：恢复文本须与帧声明 content_digest 一致——拦截索引近邻错配/decoy 静默消费
+        if strict and cd is not None and digest_bytes(data) != cd:
+            return None, None
+        if msg.payload_kind == "residual":
+            m.recovery_residual += 1
+            return data.decode("utf-8"), "residual"
+        m.recovery_embedding += 1
+        return data.decode("utf-8"), "embedding"

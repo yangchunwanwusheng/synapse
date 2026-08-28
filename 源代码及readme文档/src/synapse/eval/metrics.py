@@ -15,7 +15,12 @@ class Metrics:
     header_bytes: int = 0  # 结构化消息头字节
     nontext_transfers: int = 0  # 非文本状态传递次数
     nontext_bytes: int = 0  # 非文本载荷字节（残差/向量）
-    fallbacks: int = 0  # 校验回退次数
+    fallbacks: int = 0  # 校验回退次数（=fallback_steps，见下；旧路径=失败任务数口径）
+    # ---- V3-04 回退口径分列：events=首帧失败任务数（≤nontext_transfers）；steps=降档重发跳数 ----
+    # 旧路径（flag=False）一次失败只发一帧 text → events==steps==fallbacks，语义无漂移；
+    # 真通路逐跳回退（残差→embedding→text）一任务最多 2 跳 → 仅 steps 填充于每跳。
+    fallback_events: int = 0
+    fallback_steps: int = 0
     memory_queries: int = 0
     memory_hits: int = 0
     llm_tokens: int = 0  # 旧口径(=输出)；向后兼容合成管线
@@ -68,7 +73,11 @@ class Metrics:
             self.nontext_bytes += nb
         if msg.meta.get("fallback"):
             self.fallbacks += 1
+            self.fallback_steps += 1  # 每条降档重发帧 = 1 跳（events 由会话层在首帧失败时计 1）
         # §1.2 三档混合协议档位统计（发送方预判标注；V3-04 起真通路下 tier 增 residual_zero 档）
+        # 口径注意：tier_* 是**帧档位计数**（真通路含回退重发帧，一任务可多档）；旧路径
+        # tier_residual 含零基、真通路分列 residual_zero——两口径不可跨 run 混排，
+        # 以 manifest.config.residual_true_path 区分（审查 P2-5）。
         tier = msg.meta.get("tier")
         if tier == "residual":
             self.tier_residual += 1

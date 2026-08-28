@@ -27,20 +27,45 @@ def verify(ints, checksum: str) -> bool:
     return digest_ints(ints) == checksum
 
 
-def digest_packet(payload: bytes, base_handle: str | None, generation: int, size: int = 8) -> str:
-    """L1 完整性哈希：H(payload || base_handle || generation)，长度前缀防拼接歧义。
+def digest_packet(
+    payload: bytes,
+    base_handle: str | None,
+    generation: int,
+    session_id: str = "",
+    domain: str = "",
+    content_digest: str = "",
+    size: int = 8,
+) -> str:
+    """L1 完整性哈希：H(payload || base_handle || generation || session || domain || content)。
 
-    payload = residual 字节（residual 档）或全量量化向量字节（embedding 档）；
-    base_handle = 预测基 CAS 句柄（embedding 档为空串）；generation = 任务代（防重放）。
+    域均为线缆双方可见内容（长度前缀防拼接歧义）：
+    - payload：residual 字节（residual 档）或全量量化向量字节（embedding 档）
+    - base_handle：预测基引用（mem_id；零基/embedding 档为空串）
+    - generation：任务代（绑定任务代，检测跨代陈旧 packet——非完整重放防护）
+    - session_id：会话标识（防跨会话重放；跨进程时经 CNR hello 交换，见设计文档）
+    - domain：payload_kind（防 residual/embedding 跨域字节复用）
+    - content_digest：发送方声明的恢复文本摘要（身份校验绑定，防帧与内容错配）
+    无密钥 → 这是损坏/未同步篡改检测（integrity），不是认证（authenticity）。
     """
     h = hashlib.blake2b(digest_size=size)
     h.update(len(payload).to_bytes(8, "big"))
     h.update(payload)
     h.update((base_handle or "").encode("utf-8"))
     h.update(int(generation).to_bytes(8, "big", signed=True))
+    h.update((session_id or "").encode("utf-8"))
+    h.update((domain or "").encode("utf-8"))
+    h.update((content_digest or "").encode("utf-8"))
     return h.hexdigest()
 
 
-def verify_packet(payload: bytes, base_handle: str | None, generation: int, checksum: str) -> bool:
-    """接收方复算 L1：仅凭线缆可见内容（payload 字节 + base_handle + generation）比对。"""
-    return digest_packet(payload, base_handle, generation) == checksum
+def verify_packet(
+    payload: bytes,
+    base_handle: str | None,
+    generation: int,
+    checksum: str,
+    session_id: str = "",
+    domain: str = "",
+    content_digest: str = "",
+) -> bool:
+    """接收方复算 L1：仅凭线缆可见内容比对。"""
+    return digest_packet(payload, base_handle, generation, session_id, domain, content_digest) == checksum

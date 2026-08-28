@@ -12,12 +12,12 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 
-from .checksum import digest_packet
+from .checksum import digest_ints
 from .embedding import cosine
 
 
 def quantize_vec(vec: list[float], grid: int) -> list[int]:
-    """量化到整数网格（公开接口：发送/接收双方在网格上对话；V3-04 起线缆侧基即量化值）。"""
+    """量化到整数网格（公开接口：发送/接收双方在网格上对话）。"""
     return [int(round(v * grid)) for v in vec]
 
 
@@ -25,11 +25,13 @@ _quantize = quantize_vec  # 向后兼容旧内部名
 
 
 def serialize_base(bq: list[int]) -> bytes:
-    """量化基序列化（int16 大端，dim×2 字节）——预测基经 CAS 句柄传递的线缆形态。"""
+    """量化向量序列化（int16 大端，dim×2 字节）——embedding 档全量 packet 的线缆形态。"""
     return b"".join(int(x).to_bytes(2, "big", signed=True) for x in bq)
 
 
 def deserialize_base(b: bytes) -> list[int]:
+    if len(b) % 2 != 0:
+        raise ValueError(f"base/vector bytes length {len(b)} not even (int16 pairs)")
     return [int.from_bytes(b[i : i + 2], "big", signed=True) for i in range(0, len(b), 2)]
 
 
@@ -40,13 +42,13 @@ def _idx_width(dim: int) -> int:
 
 @dataclass
 class ResidualPacket:
-    base_handle: str | None  # 预测基（记忆/ToM 锚点）在 CAS 的句柄
+    base_handle: str | None  # 预测基引用（旧路径=CAS 句柄；真通路=mem_id，见 synapse_mode）
     residual: bytes  # 稀疏 (index:1或2B, int8 value:1B) 对；索引宽由 dim 决定（见 _idx_width）
     dim: int
     nnz: int  # 非零残差分量数（越小越省）
-    checksum: str  # L1 完整性哈希 H(residual||base_handle||generation)（接收方可复算）
+    checksum: str  # 旧口径 digest_ints(量化Y)——仅展示透传；真通路 L1 在帧层单独计算（可复算）
     orig_bytes: int  # 全量 int16 编码字节（节省统计的分母）
-    generation: int = 0  # 任务代（防跨代重放；V3-04）
+    generation: int = 0  # 任务代（V3-04 真通路回填；旧路径恒 0）
 
     def size_bytes(self) -> int:
         """非文本载荷字节 = 稀疏残差 + 校验和(8B) + 头(4B)。"""
@@ -91,8 +93,9 @@ class ResidualCodec:
                 buf.append((i >> 8) & 0xFF)
             buf.append(rc & 0xFF)
             nnz += 1
-        # L1 完整性（V3-04）：对线缆字节本身取哈希，接收方可复算（旧 digest_ints(量化Y) 不可复算）
-        checksum = digest_packet(bytes(buf), base_handle, generation)
+        # checksum 保持旧口径 digest_ints(量化Y)——旧路径对外字段零变化（审查 P1-1）；
+        # 真通路的 L1（可复算）在帧层用 checksum.digest_packet 单独计算
+        checksum = digest_ints(yq)
         return ResidualPacket(base_handle, bytes(buf), len(yq), nnz, checksum, len(yq) * 2, generation)
 
     def decode(self, pkt: ResidualPacket, B_hat: list[float] | None) -> list[int]:
@@ -101,17 +104,23 @@ class ResidualCodec:
         return self.decode_bytes(pkt.residual, bq, pkt.dim)
 
     def decode_bytes(self, residual: bytes, bq_recv: list[int], dim: int) -> list[int]:
-        """字节接口重构（V3-04 真通路）：接收方仅凭线缆可见内容（residual 字节 + 序列化基）。
+        """字节接口重构（V3-04 真通路）：接收方仅凭线缆可见内容（residual 字节 + 基）。
 
-        bq_recv 为 deserialize_base 还原的量化基；其长度即 dim（发送方 serialize 保长）。
+        bq_recv 为接收方解析出的量化基（真通路=自身记忆 embedding 量化；dim 以帧 meta 为准）。
+        畸形输入（长度非 stride 对齐 / 索引越界 / 维度不符）抛 ValueError，由接收方转回退链，
+        绝不让损坏帧崩溃任务（审查 P2-2）。
         """
-        if len(bq_recv) != dim:
-            raise ValueError(f"base dim {len(bq_recv)} != packet dim {dim}")
+        if dim <= 0 or len(bq_recv) != dim:
+            raise ValueError(f"invalid dim/base: dim={dim}, base len={len(bq_recv)}")
         yq_hat = list(bq_recv)
         iw = _idx_width(dim)
         stride = iw + 1
+        if len(residual) % stride != 0:
+            raise ValueError(f"residual length {len(residual)} not stride-aligned ({stride})")
         for k in range(0, len(residual), stride):
             idx = residual[k] if iw == 1 else (residual[k] | (residual[k + 1] << 8))
+            if idx >= dim:
+                raise ValueError(f"residual index {idx} out of range (dim={dim})")
             val = residual[k + iw]
             if val >= 128:
                 val -= 256  # int8 解码
