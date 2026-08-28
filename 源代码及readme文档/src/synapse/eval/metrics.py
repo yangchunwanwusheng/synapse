@@ -27,6 +27,14 @@ class Metrics:
     tier_residual: int = 0  # residual 档（预测基强，sim≥阈值）
     tier_embedding: int = 0  # embedding+text摘要档（预测基弱，0<sim<阈值）
     tier_text: int = 0  # text 档（无预测基/首轮冷启动/校验失败回退）
+    # ---- V3-04 真通路：诚实分档 + 恢复路径统计（cfg.residual_true_path=True 时填充）----
+    tier_residual_zero: int = 0  # residual_zero 档（冷启动零基，诚实标注，不冒充强基）
+    tier_residual_bytes: int = 0  # residual 档非文本字节构成
+    tier_residual_zero_bytes: int = 0  # residual_zero 档非文本字节构成（收缩序列起点）
+    tier_embedding_bytes: int = 0  # embedding 档非文本字节构成（全量向量 packet）
+    recovery_residual: int = 0  # 接收方经残差重构→检索恢复成功的次数
+    recovery_embedding: int = 0  # 接收方经全量向量→检索恢复（含回退跳 1）的次数
+    recovery_text: int = 0  # 接收方经全量文本回退（跳 2）恢复的次数
     frozen_snapshot_injections: int = 0  # §4.1 frozen-snapshot 记忆注入次数（保前缀缓存）
     result_spills: int = 0  # §2.3 result 序列化超阈值 → CAS 句柄 + 短摘要 的 spill 次数
     # ---- V3-02 双层计量：字节双口径 + embedding/CAS 分列（R-P0-7/11/12）----
@@ -60,12 +68,17 @@ class Metrics:
             self.nontext_bytes += nb
         if msg.meta.get("fallback"):
             self.fallbacks += 1
-        # §1.2 三档混合协议档位统计（发送方预判标注，meta["tier"] ∈ residual|embedding|text）
+        # §1.2 三档混合协议档位统计（发送方预判标注；V3-04 起真通路下 tier 增 residual_zero 档）
         tier = msg.meta.get("tier")
         if tier == "residual":
             self.tier_residual += 1
+            self.tier_residual_bytes += nb
+        elif tier == "residual_zero":
+            self.tier_residual_zero += 1
+            self.tier_residual_zero_bytes += nb
         elif tier == "embedding":
             self.tier_embedding += 1
+            self.tier_embedding_bytes += nb
         elif tier == "text":
             self.tier_text += 1
         if msg.meta.get("spilled"):  # §2.3 result spill 降级

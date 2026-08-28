@@ -69,7 +69,7 @@ def test_decode_bytes_from_serialized_base():
     base_text = "evidence about alpha : alpha-fact0 alpha-fact1 alpha-fact2"
     text = base_text + " alpha-fact3"
     cfg, codec, pkt = _pkt(emb, text, base_text=base_text)
-    bq_wire = serialize_base(quantize_vec(emb.encode(base_text)))  # 线缆侧基 = int16 字节
+    bq_wire = serialize_base(quantize_vec(emb.encode(base_text), codec.grid))  # 线缆侧基 = int16 字节
     assert pkt.base_handle == "base-handle-x"
     yq_wire = codec.decode_bytes(pkt.residual, deserialize_base(bq_wire), pkt.dim)
     yq_ref = codec.decode(pkt, emb.encode(base_text))  # 旧接口（内部量化）
@@ -114,7 +114,7 @@ def test_true_path_cold_start_recovers_via_zero_base():
     assert m.tier_residual == 0, "零基不得冒充强基 residual 档"
     assert m.recovery_residual == 1, "零基残差应真实恢复文本"
     assert m.fallbacks == 0, "无损坏时不应回退"
-    assert m.tier_residual_bytes > 0, "残差档字节构成应有真值"
+    assert m.tier_residual_zero_bytes > 0, "零基残差档字节构成应有真值"
     assert captured.get("evidence"), "summarizer 应收到恢复的 evidence"
 
 
@@ -124,7 +124,7 @@ def test_reconstruction_is_consumed():
     cfg = Config(residual_true_path=True)
     session = SynapseSession(cfg)
     captured = _spy_summarizer(session)
-    decoy = cas_decoy = session.cas.put("decoy text that never appeared on wire".encode("utf-8"))
+    decoy = session.cas.put("decoy text that never appeared on wire".encode("utf-8"))
     orig_search = session.vec_index.search
     session.vec_index.search = lambda v, k=1: [(decoy, 1.0)] or orig_search(v, k)
     session.run_task(T.g1_family(1)[0])

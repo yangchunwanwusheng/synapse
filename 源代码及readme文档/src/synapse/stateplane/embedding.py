@@ -13,6 +13,8 @@ from typing import Protocol
 
 
 def cosine(a: list[float], b: list[float]) -> float:
+    if len(a) != len(b):  # zip 静默截断会造出假高相似（V3-04 附带修复）
+        raise ValueError(f"cosine dimension mismatch: {len(a)} vs {len(b)}")
     dot = sum(x * y for x, y in zip(a, b))
     na = math.sqrt(sum(x * x for x in a))
     nb = math.sqrt(sum(y * y for y in b))

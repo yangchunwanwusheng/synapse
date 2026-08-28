@@ -38,6 +38,9 @@ class Config:
         False  # B3-no-mem：每任务清空跨任务记忆 → 证残差率下降因果源于记忆（P0-1 假设3 归因 ablation）
     )
 
+    # ---- 真通路（V3-04，Issue #148746）----
+    residual_true_path: bool = False  # True=残差/VLC 真数据通路（L1+L2 两级校验、重建检索恢复消费、三档真实分叉、CNR 驱动）；False=旧旁路路径（回归防护，翻转默认值须独立提交+真实评测重跑）
+
     # ---- 真实数据集 QA ----
     qa_sentences_k: int = 4  # [CoQA] synapse 每轮检索的故事句子数（非文本选择）
     qa_history_k: int = 2  # [CoQA] synapse 每轮复用的相关历史 Q&A 数（紧凑记忆，非全量透传）
