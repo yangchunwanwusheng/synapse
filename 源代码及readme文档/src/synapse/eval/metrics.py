@@ -28,6 +28,7 @@ class Metrics:
     tier_text: int = 0  # text 档（无预测基/首轮冷启动/校验失败回退）
     frozen_snapshot_injections: int = 0  # §4.1 frozen-snapshot 记忆注入次数（保前缀缓存）
     result_spills: int = 0  # §2.3 result 序列化超阈值 → CAS 句柄 + 短摘要 的 spill 次数
+    transport_bytes: int = 0  # 实际传输帧长（含 framing）；与 logical/wire 口径严格分列
 
     @property
     def llm_total_tokens(self) -> int:

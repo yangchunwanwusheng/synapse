@@ -30,6 +30,13 @@ uv run --no-sync synapse smoke
 
 仓库父目录含中文时，Python 3.11 会按系统 locale 读取 editable-install 的 `.pth`，可能在启动阶段出现 GBK 解码错误。统一门禁使用 `--no-editable` 避开绝对路径 `.pth`；PowerShell 脚本同时设置进程级 UTF-8 输入输出环境，并在结束后恢复。
 
+## AF_UNIX 控制面
+
+控制面可选用 Linux/openEuler `AF_UNIX` 传输：4 字节长度前缀保证 framing，发送并发、
+超时、重复关闭、对端死亡和截断帧均有显式语义。端到端复验见
+[`scripts/probe_unix_transport.py`](scripts/probe_unix_transport.py)；边界与故障矩阵见
+[`../docs/工程化基线.md`](../docs/工程化基线.md)。当前不承诺自动重连或背压策略。
+
 ## openEuler 容器验证
 
 ```bash
