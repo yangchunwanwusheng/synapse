@@ -74,6 +74,30 @@ def normalize_codeact(content: str) -> str:
     return f"<code>\n{code}\n</code>"  # full pair: passes endswith check AND parse_code_blobs
 
 
+def require_token_usage(msg):
+    """真实后端响应必须携带完整可用的 token_usage（V3-02：usage 缺失 fail 而非静默计 0）。
+
+    计量是证据链的地基：缺 usage（对象缺失 / 缺 input/output 字段 / 字段 None / 非 int /
+    负数）时计 0 会让 token 节省数字失真且不可察觉，因此全部显式失败（审查 P0-3：
+    "有 usage 壳、无可用值"同样禁止）。后端若回 prompt_tokens/completion_tokens 命名，
+    应在适配层显式转换，而不是在计量层默认 0。
+    """
+    tu = getattr(msg, "token_usage", None)
+    if tu is None:
+        raise RuntimeError(
+            "LLM response missing token_usage: chat usage is mandatory for the V3-02 evidence "
+            "ledger (check backend compatibility / response shape)."
+        )
+    for field in ("input_tokens", "output_tokens"):
+        v = getattr(tu, field, None)
+        if type(v) is not int or v < 0:  # 排除 None/float/str/bool/负数
+            raise RuntimeError(
+                f"token_usage.{field} invalid ({v!r}): expected non-negative int. "
+                "Backend returned an unusable usage object; refusing to record 0."
+            )
+    return tu
+
+
 try:  # ChatMessage 路径在不同版本可能不同
     from smolagents.models import ChatMessage
 except Exception:  # pragma: no cover
@@ -157,10 +181,9 @@ def make_model(cfg, role: str):
 
             def generate(self, *a, **kw):  # noqa: ANN001
                 msg = super().generate(*a, **kw)
-                tu = getattr(msg, "token_usage", None)
-                if tu is not None:
-                    self.output_tokens += int(getattr(tu, "output_tokens", 0) or 0)
-                    self.input_tokens += int(getattr(tu, "input_tokens", 0) or 0)
+                tu = require_token_usage(msg)
+                self.output_tokens += int(getattr(tu, "output_tokens", 0) or 0)
+                self.input_tokens += int(getattr(tu, "input_tokens", 0) or 0)
                 try:  # repair flaky CodeAct so the CodeAgent path doesn't burn all steps
                     fixed = normalize_codeact(msg.content or "")
                     if fixed != msg.content:

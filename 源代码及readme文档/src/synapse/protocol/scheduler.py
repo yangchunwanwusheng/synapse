@@ -29,12 +29,14 @@ class Scheduler:
         返回的 Agent 仅表示本地路由意图，不是远端已接收或处理消息的凭证。
         """
         if self.transport is not None:
-            frame_bytes = self.transport.send(msg.to_wire().encode("utf-8"))
+            payload = msg.to_wire().encode("utf-8")
+            frame_bytes = self.transport.send(payload)
             # Only a successfully transmitted message is counted as delivered.
             if self.metrics is not None:
-                self.metrics.record_message(msg)
-            if self.metrics is not None and hasattr(self.metrics, "transport_bytes"):
-                self.metrics.transport_bytes += frame_bytes
+                self.metrics.record_message(msg)  # 已按 len(to_wire()) 记入 transport 口径
+                # transport 真实帧长若含 framing 开销（如 4B 长度前缀），只补差值，避免双计
+                if frame_bytes != len(payload) and hasattr(self.metrics, "transport_bytes"):
+                    self.metrics.transport_bytes += frame_bytes - len(payload)
         elif self.metrics is not None:
             self.metrics.record_message(msg)
         return self.by_id.get(msg.receiver)

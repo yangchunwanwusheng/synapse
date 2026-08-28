@@ -55,6 +55,7 @@ def run_text(conv: Conversation, cfg) -> dict:
     sched = Scheduler([], cnr=cnr, metrics=m)
     history: list[tuple[str, str]] = []
     f1s: list[float] = []
+    preds: list[str] = []  # V3-02 逐题落档：预测文本（与 golds 同序，供对账与复算）
     t0 = time.perf_counter()
     cum: list[int] = []
     for turn in conv.turns:
@@ -66,12 +67,19 @@ def run_text(conv: Conversation, cfg) -> dict:
         )
         ans = _gen(model, ANSWER_SYS, ctx)
         history.append((turn.q, ans))
+        preds.append(ans)
         f1s.append(f1(ans, turn.gold))
         cum.append(sum(_io(model)))  # 累计 token 随轮次（基线应增长）
     m.latency_s = time.perf_counter() - t0
     m.llm_input_tokens, m.llm_output_tokens = _io(model)
     m.quality = round(sum(f1s) / len(f1s), 4) if f1s else 0.0
-    return {"metrics": m, "f1_per_turn": f1s, "cum_tokens": cum}
+    return {
+        "metrics": m,
+        "f1_per_turn": f1s,
+        "cum_tokens": cum,
+        "preds": preds,
+        "golds": [t.gold for t in conv.turns],
+    }
 
 
 def run_synapse(conv: Conversation, cfg) -> dict:
@@ -85,6 +93,10 @@ def run_synapse(conv: Conversation, cfg) -> dict:
     retr = HybridRetriever(store, embedder, cfg)
     cas = CAS()
     m = Metrics(mode="synapse")
+    # V3-02 cold/warm 分列：会话级 embedder/CAS 增量计数
+    from ..eval.metrics import embedder_stats
+
+    er0, eh0, et0 = embedder_stats(embedder)
     cnr = CNR()
     for aid, role, acts in (
         ("retriever-1", "retriever", ("RETRIEVE", "TELL")),
@@ -106,6 +118,7 @@ def run_synapse(conv: Conversation, cfg) -> dict:
 
     f1s: list[float] = []
     cum: list[int] = []
+    preds: list[str] = []
     history: list[tuple[str, str]] = []
     win, sem = max(1, cfg.qa_history_k), cfg.qa_history_k
     t0 = time.perf_counter()
@@ -146,6 +159,7 @@ def run_synapse(conv: Conversation, cfg) -> dict:
         )
         ans = _gen(model_ans, ANSWER_SYS, ctx)
         f1s.append(f1(ans, turn.gold))
+        preds.append(ans)
         history.append((turn.q, ans))
         store.write(
             source_agent="answerer-1",
@@ -159,8 +173,17 @@ def run_synapse(conv: Conversation, cfg) -> dict:
         cum.append(sum(_io(model_ans)))
     m.latency_s = time.perf_counter() - t0
     m.llm_input_tokens, m.llm_output_tokens = _io(model_ans)
+    er, eh, et = embedder_stats(embedder)
+    m.embed_requests, m.embed_cache_hits, m.embed_input_tokens = er - er0, eh - eh0, et - et0
+    m.cas_writes, m.cas_write_bytes = cas.writes, cas.write_bytes
     m.quality = round(sum(f1s) / len(f1s), 4) if f1s else 0.0
-    return {"metrics": m, "f1_per_turn": f1s, "cum_tokens": cum}
+    return {
+        "metrics": m,
+        "f1_per_turn": f1s,
+        "cum_tokens": cum,
+        "preds": preds,
+        "golds": [t.gold for t in conv.turns],
+    }
 
 
 def _retrieve_paras(retr, store, question: str, k: int, mode: str):
@@ -218,6 +241,7 @@ def run_text_hotpot(items: list[HotpotItem], cfg) -> dict:
     cnr.hello(_cap("answerer-1", "summarizer", ("SUMMARIZE",)))
     sched = Scheduler([], cnr=cnr, metrics=m)
     f1s: list[float] = []
+    per_item: list[dict] = []  # V3-02 逐题落档（qid/预测/金标/F1）
     t0 = time.perf_counter()
     for it in items:
         paras = "\n\n".join(f"[{p.title}] {p.text}" for p in it.paragraphs)
@@ -227,10 +251,13 @@ def run_text_hotpot(items: list[HotpotItem], cfg) -> dict:
         )
         ans = _gen(model, ANSWER_SYS, ctx)
         f1s.append(f1(ans, it.answer))
+        per_item.append({"qid": it.qid, "question": it.q, "gold": it.answer, "pred": ans})
     m.latency_s = time.perf_counter() - t0
     m.llm_input_tokens, m.llm_output_tokens = _io(model)
     m.quality = round(sum(f1s) / len(f1s), 4) if f1s else 0.0
-    return {"metrics": m, "f1_per_turn": f1s}
+    for rec, sc in zip(per_item, f1s):
+        rec["f1"] = sc
+    return {"metrics": m, "f1_per_turn": f1s, "per_item": per_item}
 
 
 def run_synapse_hotpot(items: list[HotpotItem], cfg, embedder=None) -> dict:
@@ -251,6 +278,10 @@ def run_synapse_hotpot(items: list[HotpotItem], cfg, embedder=None) -> dict:
     sched = Scheduler([], cnr=cnr, metrics=m)
     f1s: list[float] = []
     gold_recall: list[float] = []
+    per_item: list[dict] = []  # V3-02 逐题落档（qid/预测/金标/F1/检索段）
+    from ..eval.metrics import embedder_stats
+
+    er0, eh0, et0 = embedder_stats(embedder)
     k = max(1, cfg.qa_para_k)
     t0 = time.perf_counter()
     n_msg = 1
@@ -267,6 +298,8 @@ def run_synapse_hotpot(items: list[HotpotItem], cfg, embedder=None) -> dict:
                 tags=("para",),
             )
             cas.put(p.text.encode("utf-8"))
+        m.cas_writes += cas.writes  # 每题独立 CAS → 直接累入
+        m.cas_write_bytes += cas.write_bytes
         retr = HybridRetriever(store, embedder, cfg)
         hits = _retrieve_paras(retr, store, it.q, k, cfg.qa_retrieval)
         got = {u.summary for u in hits}
@@ -291,11 +324,28 @@ def run_synapse_hotpot(items: list[HotpotItem], cfg, embedder=None) -> dict:
         ctx = f"Context:\n{paras}\n\nQuestion: {it.q}\nAnswer:"
         ans = _gen(model, ANSWER_SYS, ctx)
         f1s.append(f1(ans, it.answer))
+        rec_hit = sum(1 for g in it.gold_titles if g in got) / len(it.gold_titles) if it.gold_titles else 0.0
+        per_item.append(
+            {
+                "qid": it.qid,
+                "question": it.q,
+                "gold": it.answer,
+                "pred": ans,
+                "retrieved_titles": sorted(got),
+                "gold_titles": list(it.gold_titles),
+                "gold_hit": rec_hit,
+            }
+        )
     m.latency_s = time.perf_counter() - t0
     m.llm_input_tokens, m.llm_output_tokens = _io(model)
+    er, eh, et = embedder_stats(embedder)
+    m.embed_requests, m.embed_cache_hits, m.embed_input_tokens = er - er0, eh - eh0, et - et0
     m.quality = round(sum(f1s) / len(f1s), 4) if f1s else 0.0
+    for rec, sc in zip(per_item, f1s):
+        rec["f1"] = sc
     return {
         "metrics": m,
         "f1_per_turn": f1s,
+        "per_item": per_item,
         "gold_recall": round(sum(gold_recall) / len(gold_recall), 3) if gold_recall else 0.0,
     }

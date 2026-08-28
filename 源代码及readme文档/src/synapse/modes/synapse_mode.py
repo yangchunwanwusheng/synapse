@@ -22,7 +22,7 @@ from ..memory.store import MemoryStore
 from ..memory.retrieval import HybridRetriever
 from ..memory.tom import ToMPredictor
 from ..memory.consolidate import Consolidator
-from ..eval.metrics import Metrics
+from ..eval.metrics import Metrics, embedder_stats
 from ..prompts import plan_prompt, retrieve_prompt, execute_prompt, summarize_prompt
 
 
@@ -51,6 +51,9 @@ class SynapseSession:
         team = self.team
         team.bind_topic(task.topic)
         m = Metrics(mode="synapse")
+        # V3-02 cold/warm 分列：embedder 与 CAS 跨任务持久，取任务级增量
+        er0, eh0, et0 = embedder_stats(self.embedder)
+        cw0, cb0 = self.cas.writes, self.cas.write_bytes
         # §2.2 CNR 握手带运行时能力探测（check_fn 门控）：Executor 声明 codeact_sandbox 时实测
         sched = Scheduler(team.agents(), cnr=CNR(check_fn=_make_verify_check_fn()), metrics=m)
         planner = sched.agent("planner")
@@ -103,10 +106,7 @@ class SynapseSession:
         # 注：首轮冷启动不走 text 档而走零基 residual 档，以保住"残差随经验单调下降"的核心叙事
         # （若首轮 nontext=0、末轮>0，收缩断言会反相；零基残差是收缩序列的合法正起点）。
         has_base = b_hat is not None and base_sim > 0.0
-        tier = (
-            "residual" if not has_base or base_sim >= cfg.verify_threshold
-            else "embedding"
-        )
+        tier = "residual" if not has_base or base_sim >= cfg.verify_threshold else "embedding"
 
         # 非文本状态传递：预测残差编码（只传必要分量）；线缆只走 残差句柄 + 内容句柄 + 校验
         pkt = self.codec.encode(Y, b_hat, base_id)
@@ -173,7 +173,8 @@ class SynapseSession:
         )
         # 使用环（§13.2）：总结器用接收方已取回的证据正文 + 计算结果出结论（复用同一冻结快照）
         conclusion = summ.run(
-            summarize_prompt(task, memory_snapshot), reset=True,
+            summarize_prompt(task, memory_snapshot),
+            reset=True,
             additional_args={"evidence": recv_text, "metric": exec_res},
         )
 
@@ -214,6 +215,9 @@ class SynapseSession:
         ti, to = team.token_io()
         m.llm_input_tokens = ti - ti0
         m.llm_output_tokens = to - to0
+        er, eh, et = embedder_stats(self.embedder)
+        m.embed_requests, m.embed_cache_hits, m.embed_input_tokens = er - er0, eh - eh0, et - et0
+        m.cas_writes, m.cas_write_bytes = self.cas.writes - cw0, self.cas.write_bytes - cb0
         m.quality = 1.0 if conclusion else 0.0
         return {
             "metrics": m,
