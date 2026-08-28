@@ -103,11 +103,46 @@ def test_decode_bytes_robustness():
     with pytest.raises(ValueError):
         codec.decode_bytes(b"\xff\xff\xff", [0] * cfg.embed_dim, cfg.embed_dim)  # 非 stride 对齐
     with pytest.raises(ValueError):
-        codec.decode_bytes(b"\x40\x05", [0] * cfg.embed_dim, cfg.embed_dim)  # idx 0x4040 越界
+        codec.decode_bytes(b"\x7f\x05", [0] * cfg.embed_dim, cfg.embed_dim)  # idx 0x7f=127 越界(dim=64)
+    with pytest.raises(ValueError):  # 高维 2B 索引路径：idx 0xFFFF 越界 (dim=2048)
+        codec.decode_bytes(b"\xff\xff\x05", [0] * 2048, 2048)
     with pytest.raises(ValueError):
         deserialize_base(b"\x01")  # 奇数字节
     with pytest.raises(ValueError):
         codec.decode_bytes(b"", [0] * 4, 8)  # 基维度不符
+
+
+def test_receive_frame_rejects_malformed_frames():
+    # GPT 闭环复核 B2/B3：content_digest 为强制不变量（缺失/畸形拒绝）；空 handles 不崩溃；
+    # text 帧 L1 未过（错 checksum）拒绝——统一返回 (None, None) 走回退链。
+    from synapse.eval.metrics import Metrics
+    from synapse.protocol.messages import ActionType, Message
+    from synapse.stateplane.checksum import digest_bytes
+
+    cfg = Config(residual_true_path=True)
+    session = SynapseSession(cfg)
+    m = Metrics()
+    base_meta = {"generation": 1, "content_digest": "a" * 16, "dim": 4}
+    # 缺 content_digest → strict 下身份绑定不变量拒绝
+    bad1 = Message("m1", "r", "s", ActionType.TELL.value, handles=("h",),
+                   payload_kind="residual", checksum="x", meta={"generation": 1, "dim": 4})
+    assert session._receive_frame(bad1, m) == (None, None)
+    # content_digest 畸形（长度错/非 str）
+    bad2 = Message("m2", "r", "s", ActionType.TELL.value, handles=("h",),
+                   payload_kind="residual", checksum="x", meta={"generation": 1, "content_digest": "abc", "dim": 4})
+    assert session._receive_frame(bad2, m) == (None, None)
+    # 空 handles → 受控 (None, None)，不抛异常
+    bad3 = Message("m3", "r", "s", ActionType.TELL.value, handles=(),
+                   payload_kind="residual", checksum="x", meta=dict(base_meta))
+    assert session._receive_frame(bad3, m) == (None, None)
+    # text 帧：正文与 digest 一致但 L1 checksum 错 → 拒绝（生成时未对正文算 L1 的帧不可信）
+    text = "hello wire"
+    cd = digest_bytes(text.encode("utf-8"))
+    bad4 = Message("m4", "r", "s", ActionType.TELL.value, payload_kind="text", text=text,
+                   checksum="deadbeefdeadbeef",
+                   meta={"generation": 1, "content_digest": cd})
+    assert session._receive_frame(bad4, m) == (None, None)
+    assert m.recovery_text == 0
 
 
 def test_legacy_checksum_unchanged():

@@ -34,6 +34,11 @@ from ..eval.metrics import Metrics, embedder_stats
 from ..prompts import plan_prompt, retrieve_prompt, execute_prompt, summarize_prompt
 
 
+def _valid_content_digest(cd) -> bool:
+    """content_digest 合法性（blake2b 8B hex=16 字符）。strict 下缺失/畸形即校验失败。"""
+    return isinstance(cd, str) and len(cd) == 16 and all(c in "0123456789abcdef" for c in cd)
+
+
 class SynapseSession:
     """持续会话：共享记忆跨任务累积，非文本字节随经验减少。"""
 
@@ -410,32 +415,44 @@ class SynapseSession:
     def _receive_frame(self, msg, m) -> tuple[str | None, str | None]:
         """接收方恢复：仅凭线缆帧字段（payload_kind/handles/checksum/meta/text）驱动。
 
-        - text 帧：读帧内正文，content_digest 一致性校验后消费。
+        - text 帧：L1（域含 payload=正文字节）+ content_digest 身份校验后消费。
         - residual/embedding 帧：L1 完整性（可复算哈希）→ residual 按句柄从自身记忆解析
           预测基（缺失/维度不符→回退）→ 重构 → L2 余弦检索 + content_digest 身份校验。
-        任何失败返回 (None, None) 由调用方走回退链；畸形字节转 ValueError 受控回退不崩溃。
+        strict 下 content_digest 为强制不变量（缺失/畸形即校验失败，不降级放行）。
+        任何失败（含畸形帧解析）统一返回 (None, None) 由调用方走回退链，绝不崩溃。
         """
         cfg = self.cfg
         strict = not cfg.abl_no_checksum
         meta = msg.meta or {}
-        gen = int(meta.get("generation", 0))
+        try:
+            gen = int(meta.get("generation", 0))
+        except (TypeError, ValueError):
+            return None, None
         cd = meta.get("content_digest")
+        if strict and not _valid_content_digest(cd):  # 身份绑定为不变量，非可选附加字段
+            return None, None
         if msg.payload_kind == "text":
             if msg.text is None:
                 return None, None
-            if strict and cd is not None and digest_bytes(msg.text.encode("utf-8")) != cd:
+            tb = msg.text.encode("utf-8", errors="strict")
+            # text 帧 L1：payload=正文字节（与发送方 _checksum(evidence, "", "text") 对称）
+            if strict and not verify_packet(tb, "", gen, msg.checksum, self.session_id, "text", cd):
+                return None, None
+            if strict and digest_bytes(tb) != cd:  # 显式身份比对（L1 域已绑定，防御深度）
                 return None, None
             m.recovery_text += 1
             return msg.text, "text"
-        payload_handle, base_ref = (tuple(msg.handles) + ("",))[:2]
-        payload = self.cas.get(payload_handle)
-        if payload is None:
-            return None, None
-        if strict and not verify_packet(
-            payload, base_ref, gen, msg.checksum, self.session_id, msg.payload_kind, cd or ""
-        ):
-            return None, None
         try:
+            hs = tuple(msg.handles or ())
+            payload_handle = hs[0] if hs else ""
+            base_ref = hs[1] if len(hs) > 1 else ""
+            payload = self.cas.get(payload_handle)
+            if payload is None:
+                return None, None
+            if strict and not verify_packet(
+                payload, base_ref, gen, msg.checksum, self.session_id, msg.payload_kind, cd
+            ):
+                return None, None
             if msg.payload_kind == "residual":
                 dim = int(meta.get("dim", 0))
                 if base_ref:  # 记忆是解码端边信息：接收方从自身 MemoryStore 解析预测基
@@ -451,8 +468,8 @@ class SynapseSession:
                 yq_hat = deserialize_base(payload)
             else:
                 return None, None
-        except ValueError:
-            return None, None  # 畸形帧（非对齐长度/越界索引/奇数向量字节）→ 回退链
+        except (ValueError, TypeError, IndexError):
+            return None, None  # 畸形帧（空 handles/非对齐长度/越界索引/奇数向量字节等）→ 回退链
         hits = self.vec_index.search(yq_hat, k=1)
         if not hits:
             return None, None
@@ -463,10 +480,14 @@ class SynapseSession:
         if data is None:
             return None, None
         # 身份校验：恢复文本须与帧声明 content_digest 一致——拦截索引近邻错配/decoy 静默消费
-        if strict and cd is not None and digest_bytes(data) != cd:
+        if strict and digest_bytes(data) != cd:
+            return None, None
+        try:
+            text = data.decode("utf-8")
+        except UnicodeDecodeError:
             return None, None
         if msg.payload_kind == "residual":
             m.recovery_residual += 1
-            return data.decode("utf-8"), "residual"
+            return text, "residual"
         m.recovery_embedding += 1
-        return data.decode("utf-8"), "embedding"
+        return text, "embedding"
