@@ -6,7 +6,7 @@ from ..eval.metrics import Metrics, improvement
 from ..stateplane.embedding import make_embedder
 from .dataset import load_conversations, load_hotpot
 from .pipeline import run_synapse, run_synapse_hotpot, run_text, run_text_hotpot
-from .stats import bootstrap_ci, mean_std, paired_winloss
+from .stats import cluster_bootstrap_ci, mean_std, paired_winloss, variance_components
 
 
 def _agg(traj: list[Metrics]) -> Metrics:
@@ -35,10 +35,13 @@ def run_coqa(cfg, n_conv: int = 2, path: str = "data/coqa_sample.json") -> dict:
                 "synapse": rs["metrics"].summary(),
                 "text_f1_per_turn": rt["f1_per_turn"],
                 "synapse_f1_per_turn": rs["f1_per_turn"],
+                "text_em_per_turn": rt["em_per_turn"],
+                "synapse_em_per_turn": rs["em_per_turn"],
                 "text_cum_tokens": rt.get("cum_tokens", []),
                 "synapse_cum_tokens": rs.get("cum_tokens", []),
                 "questions": [t.q for t in c.turns],
                 "golds": rs.get("golds", []),
+                "all_golds": rs.get("all_golds", []),
                 "text_preds": rt.get("preds", []),
                 "synapse_preds": rs.get("preds", []),
             }
@@ -53,10 +56,13 @@ def run_coqa(cfg, n_conv: int = 2, path: str = "data/coqa_sample.json") -> dict:
                     "qid": f"{c['conv_id']}:{i}",
                     "question": c["questions"][i],
                     "gold": c["golds"][i],
+                    "golds": c["all_golds"][i],
                     "text_pred": c["text_preds"][i],
                     "text_f1": c["text_f1_per_turn"][i],
+                    "text_em": c["text_em_per_turn"][i],
                     "synapse_pred": c["synapse_preds"][i],
                     "synapse_f1": c["synapse_f1_per_turn"][i],
+                    "synapse_em": c["synapse_em_per_turn"][i],
                 }
             )
     return {
@@ -83,10 +89,13 @@ def run_hotpot(
             "qid": t_rec["qid"],
             "question": t_rec["question"],
             "gold": t_rec["gold"],
+            "golds": t_rec.get("golds", [t_rec["gold"]]),
             "text_pred": t_rec["pred"],
             "text_f1": t_rec["f1"],
+            "text_em": t_rec["em"],
             "synapse_pred": s_rec["pred"],
             "synapse_f1": s_rec["f1"],
+            "synapse_em": s_rec["em"],
             "retrieved_titles": s_rec.get("retrieved_titles", []),
             "gold_titles": s_rec.get("gold_titles", []),
             "gold_hit": s_rec.get("gold_hit", 0.0),
@@ -115,7 +124,7 @@ def run_hotpot_stats(cfg, n_items: int = 50, repeats: int = 3, path: str = "data
     """
     items = load_hotpot(path, n_items)
     embedder = make_embedder(cfg)  # 共享缓存：repeats>1 时嵌入只调一次
-    runs, pooled_t, pooled_s = [], [], []
+    runs, repeated_t, repeated_s = [], [], []
     for _ in range(repeats):
         rt = run_text_hotpot(items, cfg)
         rs = run_synapse_hotpot(items, cfg, embedder=embedder)
@@ -137,9 +146,12 @@ def run_hotpot_stats(cfg, n_items: int = 50, repeats: int = 3, path: str = "data
                 "syn_embed_cache_hits": sm.embed_cache_hits,
             }
         )
-        pooled_t += rt["f1_per_turn"]
-        pooled_s += rs["f1_per_turn"]
-    deltas = [s - t for t, s in zip(pooled_t, pooled_s)]
+        repeated_t.append(rt["f1_per_turn"])
+        repeated_s.append(rs["f1_per_turn"])
+    delta_clusters = [
+        [repeated_s[r][i] - repeated_t[r][i] for r in range(repeats)] for i in range(len(items))
+    ]
+    item_deltas = [sum(cluster) / len(cluster) for cluster in delta_clusters]
     levels = [it.level for it in items]
     return {
         "n_items": len(items),
@@ -157,9 +169,11 @@ def run_hotpot_stats(cfg, n_items: int = 50, repeats: int = 3, path: str = "data
         "syn_f1": mean_std([r["syn_f1"] for r in runs]),
         "gold_recall": mean_std([r["gold_recall"] for r in runs]),
         "paired_delta_f1": {
-            "mean": mean_std(deltas)["mean"],
-            "ci95": bootstrap_ci(deltas),
-            **paired_winloss(pooled_t, pooled_s),
-            "n_pairs": len(deltas),
+            "mean": mean_std(item_deltas)["mean"],
+            "ci95": cluster_bootstrap_ci(delta_clusters),
+            "variance": variance_components(delta_clusters),
+            **paired_winloss([0.0] * len(item_deltas), item_deltas),
+            "n_pairs": len(item_deltas),
+            "cluster_unit": "question",
         },
     }

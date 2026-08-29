@@ -39,6 +39,37 @@ def bootstrap_ci(xs: list[float], iters: int = 5000, alpha: float = 0.05, seed: 
     return [round(lo, 4), round(hi, 4)]
 
 
+def cluster_bootstrap_ci(
+    clusters: list[list[float]], iters: int = 5000, alpha: float = 0.05, seed: int = 0
+) -> list[float]:
+    """题目级 cluster bootstrap：先题内均值，再在题目之间有放回抽样。
+
+    每个 cluster 是同一题的重复运行观测。这样不会把同题重复调用误当成独立样本。
+    """
+    if any(not cluster for cluster in clusters):
+        raise ValueError("clusters must not contain empty observations")
+    return bootstrap_ci([statistics.fmean(cluster) for cluster in clusters], iters, alpha, seed)
+
+
+def variance_components(clusters: list[list[float]]) -> dict[str, float]:
+    """分列题间方差与题内（运行间）方差。"""
+    if not clusters or any(not cluster for cluster in clusters):
+        return {"between_item": 0.0, "within_item": 0.0}
+    item_means = [statistics.fmean(cluster) for cluster in clusters]
+    within = [statistics.pvariance(cluster) for cluster in clusters if len(cluster) > 1]
+    return {
+        "between_item": round(statistics.pvariance(item_means), 6) if len(item_means) > 1 else 0.0,
+        "within_item": round(statistics.fmean(within), 6) if within else 0.0,
+    }
+
+
+def alternating_order(item_ids: list[str], seed: int = 0) -> list[dict[str, str]]:
+    """固定 seed 洗牌后按题交替 AB/BA，并返回可落档执行序列。"""
+    ordered = list(item_ids)
+    random.Random(seed).shuffle(ordered)
+    return [{"qid": qid, "order": "AB" if i % 2 == 0 else "BA"} for i, qid in enumerate(ordered)]
+
+
 def paired_winloss(text: list[float], syn: list[float], eps: float = 1e-9) -> dict:
     """同题配对胜负：synapse 优 / 平 / 劣 计数。"""
     win = sum(1 for t, s in zip(text, syn) if s > t + eps)

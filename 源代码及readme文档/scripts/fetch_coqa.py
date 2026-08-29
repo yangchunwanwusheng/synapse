@@ -1,55 +1,71 @@
-"""抓取 CoQA 验证集对话到 data/coqa_sample.json（经 HuggingFace datasets-server，无需重依赖）。
+"""抓取 CoQA 1.0 dev 对话并保留全部人工参考答案。
 
-每段对话 = 一组关联连续任务（赛题 M7）。筛选 8–20 轮、故事 ≤420 词，便于小规模真实实验。
+每段对话 = 一组关联连续任务（赛题 M7）。筛选 8–20 轮、故事 ≤420 词。
   uv run python scripts/fetch_coqa.py [N]
 """
 
 from __future__ import annotations
 
 import json
-import os
 import sys
 import urllib.request
 
-BASE = (
-    "https://datasets-server.huggingface.co/rows?dataset=stanfordnlp%2Fcoqa&config=default&split=validation"
-)
+from dataset_provenance import sha256_bytes, write_dataset
+
+SOURCE = "https://downloads.cs.stanford.edu/nlp/data/coqa/coqa-dev-v1.0.json"
+SOURCE_SHA256 = "dfa367a9733ce53222918d0231d9b3bedc2b8ee831a2845f62dfc70701f2540a"
 
 
 def main() -> None:
     want = int(sys.argv[1]) if len(sys.argv) > 1 else 6
+    request = urllib.request.Request(SOURCE, headers={"User-Agent": "synapse-dataset-fetch/1.0"})
+    with urllib.request.urlopen(request, timeout=60) as response:
+        raw = response.read()
+    actual_sha = sha256_bytes(raw)
+    if actual_sha != SOURCE_SHA256:
+        raise RuntimeError(f"CoQA source checksum mismatch: expected {SOURCE_SHA256}, got {actual_sha}")
+
+    doc = json.loads(raw)
     convs = []
-    for off in range(0, 500, 100):
-        with urllib.request.urlopen(f"{BASE}&offset={off}&length=100", timeout=60) as r:
-            rows = json.load(r)["rows"]
-        for x in rows:
-            row = x["row"]
-            q = row["questions"]
-            a = row["answers"]
-            ai = a["input_text"] if isinstance(a, dict) and "input_text" in a else a
-            if 8 <= len(q) <= 20 and len(row["story"].split()) <= 420:
-                convs.append(
-                    {
-                        "id": f"coqa-{x['row_idx']}",
-                        "source": row.get("source", ""),
-                        "story": row["story"],
-                        "turns": [{"q": q[i], "a": ai[i]} for i in range(len(q))],
-                    }
-                )
+    for row in doc["data"]:
+        questions = row["questions"]
+        answers = row["answers"]
+        if not (8 <= len(questions) <= 20 and len(row["story"].split()) <= 420):
+            continue
+        additional = row.get("additional_answers", {})
+        turns = []
+        for i, (question, answer) in enumerate(zip(questions, answers)):
+            aliases = [refs[i]["input_text"] for refs in additional.values() if i < len(refs)]
+            turns.append(
+                {
+                    "q": question["input_text"],
+                    "a": answer["input_text"],
+                    "answer_aliases": list(dict.fromkeys(aliases)),
+                }
+            )
+        convs.append(
+            {"id": row["id"], "source": row.get("source", ""), "story": row["story"], "turns": turns}
+        )
         if len(convs) >= want:
             break
-    convs = convs[:want]
-    os.makedirs("data", exist_ok=True)
-    json.dump(
+
+    metadata = write_dataset(
+        "data/coqa_sample.json",
         convs,
-        open(os.path.join("data", "coqa_sample.json"), "w", encoding="utf-8"),
-        ensure_ascii=False,
-        indent=1,
+        {
+            "dataset": "CoQA",
+            "version": doc.get("version", "1.0"),
+            "split": "dev",
+            "source_url": SOURCE,
+            "source_sha256": actual_sha,
+        },
     )
     print(f"saved {len(convs)} conversations -> data/coqa_sample.json")
-    for c in convs:
+    print(f"source_sha256={actual_sha} output_sha256={metadata['output_sha256']}")
+    for conv in convs:
         print(
-            f"  {c['id']}: {len(c['turns'])} turns, story {len(c['story'].split())} words, src={c['source']}"
+            f"  {conv['id']}: {len(conv['turns'])} turns, "
+            f"story {len(conv['story'].split())} words, src={conv['source']}"
         )
 
 

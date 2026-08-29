@@ -251,6 +251,26 @@ def test_write_run_schema_valid(tmp_path):
     assert "config" in doc and "result" in doc
 
 
+def test_dataset_info_imports_provenance_sidecar(tmp_path):
+    data = tmp_path / "sample.json"
+    data.write_text("[]\n", encoding="utf-8")
+    (tmp_path / "sample.json.meta.json").write_text(
+        json.dumps(
+            {
+                "dataset": "example/qa",
+                "revision": "a" * 40,
+                "split": "validation",
+                "output_sha256": "ignored-in-favor-of-recomputed-file-hash",
+            }
+        ),
+        encoding="utf-8",
+    )
+    info = dataset_info(str(data), 0)
+    assert info["dataset"] == "example/qa"
+    assert info["revision"] == "a" * 40
+    assert info["sha256"]
+
+
 def _mini_manifest(command: str = "x") -> dict:
     """schema 合法的最小 manifest（新契约必填键齐全）。"""
     return {

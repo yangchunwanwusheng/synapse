@@ -9,21 +9,32 @@
 from __future__ import annotations
 
 import json
-import os
 import sys
 import urllib.request
+from urllib.parse import urlencode
 
-BASE = (
-    "https://datasets-server.huggingface.co/rows?dataset=hotpotqa%2Fhotpot_qa"
-    "&config=distractor&split=validation"
-)
+from dataset_provenance import write_dataset
+
+DATASET = "hotpotqa/hotpot_qa"
+REVISION = "1908d6afbbead072334abe2965f91bd2709910ab"
+BASE = "https://datasets-server.huggingface.co/rows"
 
 
 def main() -> None:
     want = int(sys.argv[1]) if len(sys.argv) > 1 else 20
     items = []
     for off in range(0, 500, 100):
-        with urllib.request.urlopen(f"{BASE}&offset={off}&length=100", timeout=60) as r:
+        query = urlencode(
+            {
+                "dataset": DATASET,
+                "config": "distractor",
+                "split": "validation",
+                "revision": REVISION,
+                "offset": off,
+                "length": 100,
+            }
+        )
+        with urllib.request.urlopen(f"{BASE}?{query}", timeout=60) as r:
             rows = json.load(r)["rows"]
         for x in rows:
             row = x["row"]
@@ -47,15 +58,14 @@ def main() -> None:
         if len(items) >= want:
             break
     items = items[:want]
-    os.makedirs("data", exist_ok=True)
-    json.dump(
+    metadata = write_dataset(
+        "data/hotpot_sample.json",
         items,
-        open(os.path.join("data", "hotpot_sample.json"), "w", encoding="utf-8"),
-        ensure_ascii=False,
-        indent=1,
+        {"dataset": DATASET, "revision": REVISION, "split": "validation", "config": "distractor"},
     )
     n_words = sum(len(p["text"].split()) for it in items for p in it["paragraphs"]) / max(1, len(items))
     print(f"saved {len(items)} items -> data/hotpot_sample.json (avg {n_words:.0f} ctx words/题)")
+    print(f"revision={REVISION} sha256={metadata['output_sha256']}")
     for it in items[:5]:
         print(f"  {it['id'][:12]}: {it['level']}/{it['type']} | gold={it['gold_titles']}")
 

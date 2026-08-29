@@ -1,5 +1,6 @@
 """CoQA 真实数据集 QA 管线测试（离线 mock 验通信/记忆/token 管线；F1 与数据集逻辑纯离线）。"""
 
+import json
 import os
 import sys
 
@@ -15,8 +16,15 @@ from synapse.qa.pipeline import (  # noqa: E402
     run_text,
     run_text_hotpot,
 )
-from synapse.qa.scoring import f1  # noqa: E402
-from synapse.qa.stats import bootstrap_ci, mean_std, paired_winloss  # noqa: E402
+from synapse.qa.scoring import exact_match, f1, score  # noqa: E402
+from synapse.qa.stats import (  # noqa: E402
+    alternating_order,
+    bootstrap_ci,
+    cluster_bootstrap_ci,
+    mean_std,
+    paired_winloss,
+    variance_components,
+)
 
 
 def test_f1_normalization():
@@ -26,10 +34,35 @@ def test_f1_normalization():
     assert 0 < f1("white cat", "white dog") < 1
 
 
+def test_official_scoring_golden_cases_and_multiple_references():
+    assert exact_match("The, Eiffel Tower!", "eiffel tower") == 1.0
+    assert f1("Denver Broncos", "Broncos") == 2 / 3
+    assert score("NYC", ["New York City", "NYC"]) == {"em": 1.0, "f1": 1.0}
+
+
 def test_coqa_dataset_loads():
     convs = load_conversations(n=2)
     assert convs and convs[0].turns and convs[0].story
     assert len(split_sentences(convs[0].story)) >= 3
+
+
+def test_coqa_loader_preserves_all_reference_answers(tmp_path):
+    path = tmp_path / "coqa.json"
+    path.write_text(
+        json.dumps(
+            [
+                {
+                    "id": "c1",
+                    "source": "test",
+                    "story": "One. Two. Three.",
+                    "turns": [{"q": "Where?", "a": "New York City", "answer_aliases": ["NYC", "New York"]}],
+                }
+            ]
+        ),
+        encoding="utf-8",
+    )
+    turn = load_conversations(str(path))[0].turns[0]
+    assert turn.answers == ("New York City", "NYC", "New York")
 
 
 def test_qa_pipelines_offline_plumbing():
@@ -49,6 +82,29 @@ def test_hotpot_dataset_loads():
     assert items and items[0].paragraphs and items[0].gold_titles
     assert len(items[0].paragraphs) == 10  # distractor 设定：10 段
     assert all(g in {p.title for p in items[0].paragraphs} for g in items[0].gold_titles)
+
+
+def test_dataset_loader_preserves_multiple_references_and_decomposition(tmp_path):
+    path = tmp_path / "sample.json"
+    path.write_text(
+        json.dumps(
+            [
+                {
+                    "id": "q1",
+                    "question": "Who?",
+                    "answer": "New York City",
+                    "answer_aliases": ["NYC"],
+                    "question_decomposition": [{"question": "Where?", "answer": "New York"}],
+                    "gold_titles": ["New York City"],
+                    "paragraphs": [{"title": "New York City", "text": "NYC is a city."}],
+                }
+            ]
+        ),
+        encoding="utf-8",
+    )
+    item = load_hotpot(str(path))[0]
+    assert item.answers == ("New York City", "NYC")
+    assert item.question_decomposition[0]["answer"] == "New York"
 
 
 def test_hotpot_pipelines_offline_plumbing():
@@ -122,6 +178,19 @@ def test_stats_helpers():
     assert lo <= hi and lo == bootstrap_ci([0.0, 0.1, 0.2, 0.1, 0.0], seed=0)[0]
     wl = paired_winloss([0.0, 1.0, 0.5], [1.0, 1.0, 0.0])  # 胜/平/负
     assert wl == {"syn_win": 1, "tie": 1, "syn_loss": 1}
+
+
+def test_question_cluster_bootstrap_known_case():
+    clusters = [[0.0, 0.2], [0.8, 1.0]]
+    # 题内均值为 [0.1, 0.9]；两题 bootstrap 的可能均值只有 0.1/0.5/0.9。
+    assert cluster_bootstrap_ci(clusters, iters=2000, seed=7) == [0.1, 0.9]
+    assert variance_components(clusters) == {"between_item": 0.16, "within_item": 0.01}
+
+
+def test_ab_ba_execution_order_is_reproducible_and_balanced():
+    seq = alternating_order(["q1", "q2", "q3", "q4"], seed=11)
+    assert seq == alternating_order(["q1", "q2", "q3", "q4"], seed=11)
+    assert [x["order"] for x in seq] == ["AB", "BA", "AB", "BA"]
 
 
 if __name__ == "__main__":
