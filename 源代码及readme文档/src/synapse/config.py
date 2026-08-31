@@ -40,9 +40,14 @@ class Config:
 
     # ---- 真通路（V3-04，Issue #148746）----
     residual_true_path: bool = False  # True=残差/VLC 真数据通路（L1+L2 两级校验、重建检索恢复消费、三档真实分叉、CNR 驱动）；False=旧旁路路径（回归防护，翻转默认值须独立提交+真实评测重跑）
+    base_policy: str = "oracle"  # V3-04 ToM 选基三档：oracle=发送方以Y择优(乐观) | query_top1=检索top-1(接收方可复现) | learned=topic原型(聚合学习式)；字节按档分列报告
+    residual_project_dim: int = 0  # >0 时残差/索引在 JL 随机投影域（确定性共享投影，残差分量数≈按维数比下降）；0=原域；效果需真实 API 验证
 
     # ---- 真实数据集 QA ----
-    qa_sentences_k: int = 4  # [CoQA] synapse 每轮检索的故事句子数（非文本选择）
+    qa_story_mode: str = "full"  # [CoQA] full=整段故事入prompt(历史口径) | sentences=句级检索top-k(qa_sentences_k 真实生效，V3-04 附带修复)
+    qa_sentences_k: int = (
+        4  # [CoQA] synapse 每轮检索的故事句子数（非文本选择；qa_story_mode=sentences 时生效）
+    )
     qa_history_k: int = 2  # [CoQA] synapse 每轮复用的相关历史 Q&A 数（紧凑记忆，非全量透传）
     qa_para_k: int = 3  # [HotpotQA] synapse 每题检索的相关段落数（10 段中只取 k，丢干扰段）
     qa_retrieval: str = "single"  # [HotpotQA] "single"=单跳问题检索 | "twohop"=两跳(用第一跳内容补检索桥接段)

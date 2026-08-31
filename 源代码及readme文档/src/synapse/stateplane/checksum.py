@@ -35,8 +35,9 @@ def digest_packet(
     domain: str = "",
     content_digest: str = "",
     size: int = 8,
+    key: bytes | None = None,
 ) -> str:
-    """L1 完整性哈希：H(payload || base_handle || generation || session || domain || content)。
+    """L1 完整性/认证哈希：H(payload || base_handle || generation || session || domain || content)。
 
     域均为线缆双方可见内容（长度前缀防拼接歧义）：
     - payload：residual 字节（residual 档）或全量量化向量字节（embedding 档）
@@ -45,9 +46,11 @@ def digest_packet(
     - session_id：会话标识（防跨会话重放；跨进程时经 CNR hello 交换，见设计文档）
     - domain：payload_kind（防 residual/embedding 跨域字节复用）
     - content_digest：发送方声明的恢复文本摘要（身份校验绑定，防帧与内容错配）
-    无密钥 → 这是损坏/未同步篡改检测（integrity），不是认证（authenticity）。
+    - key：会话 MAC 密钥（blake2b keyed）——带 key 为认证完整性（MAC），能改 payload 的
+      主动方无 key 不能重算校验和；无 key 仅为损坏/未同步篡改检测（integrity）。
+      key 分发：同进程自动共享；跨进程经 CNR hello 协商（路线图，见设计文档 §6）。
     """
-    h = hashlib.blake2b(digest_size=size)
+    h = hashlib.blake2b(digest_size=size, key=key) if key else hashlib.blake2b(digest_size=size)
     h.update(len(payload).to_bytes(8, "big"))
     h.update(payload)
     h.update((base_handle or "").encode("utf-8"))
@@ -66,6 +69,10 @@ def verify_packet(
     session_id: str = "",
     domain: str = "",
     content_digest: str = "",
+    key: bytes | None = None,
 ) -> bool:
-    """接收方复算 L1：仅凭线缆可见内容比对。"""
-    return digest_packet(payload, base_handle, generation, session_id, domain, content_digest) == checksum
+    """接收方复算 L1：仅凭线缆可见内容（+会话密钥）比对。"""
+    return (
+        digest_packet(payload, base_handle, generation, session_id, domain, content_digest, key=key)
+        == checksum
+    )

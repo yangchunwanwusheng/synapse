@@ -1,8 +1,12 @@
 """ToM 预测器：估计接收方可复现的预测基 B̂（非文本状态传递的"可预测部分"）。
 
-- L0（默认，确定性）：B̂ = 接收方共享记忆中与 query 相关单元 embedding 的加权聚合。
-  记忆随任务累积 → 聚合越接近新任务的 Y → 残差越稀疏 → 非文本字节越少。
-- L1（可选扩展）：小 MLP / 检索式，自监督信号 = 残差重构成功率。
+V3-04 选基三档（cfg.base_policy，字节按档分列报告——彻查 R-P0-6 口径修复）：
+- oracle（旧默认，乐观口径）：发送方以 cos(candidate, Y) 择优——目标感知 codebook 选择，
+  发送方知道 Y 才能选出，残差字节是"encoder-oracle 估算载荷"；
+- query_top1（接收方可复现）：基 = query 检索 top-1 单元——接收方凭同一 query 可独立复现，
+  无 Y 泄漏，是诚实口径的残差上界；
+- learned（学习式）：基 = topic 巩固原型（Consolidator 从历史 evidence 聚合的质心，
+  kind=experience）——记忆随任务累积逼近任务分布，非参数学习；无原型时退化为 query_top1。
 """
 
 from __future__ import annotations
@@ -15,6 +19,7 @@ class ToMPredictor:
         self._retriever = retriever
         self._embedder = embedder
         self._cfg = cfg
+        self.policy = getattr(cfg, "base_policy", "oracle")
 
     def estimate(
         self, receiver_id: str, query: str, target: list[float] | None = None, k: int | None = None
@@ -23,16 +28,34 @@ class ToMPredictor:
         emb, _, _ = self.best_base(self._retriever.search(query, k=k), target)
         return emb
 
-    def best_base(
-        self, results, target: list[float] | None
-    ) -> tuple[list[float] | None, str | None, float]:
-        """从接收方记忆候选中选与 target(Y) 最接近者作预测基（发送方残差优化）。
+    def best_base(self, results, target: list[float] | None) -> tuple[list[float] | None, str | None, float]:
+        """按 cfg.base_policy 三档选预测基；返回 (embedding, mem_id, sim)。
 
-        base 经其 mem_id 句柄告知接收方——双方共享记忆，接收方取同一单元复现该基。
-        返回 (embedding, mem_id, sim)；无候选返回 (None, None, 0.0)。命中越准 → 基越接近 Y
-        → 残差越稀疏 → 非文本字节越少。sim 同时供 §1.2 三档协议发送方预判选档。
+        mem_id 句柄上线缆，接收方从自身共享记忆取同一单元复现该基（真通路 _receive_frame）。
+        sim 供 §1.2 三档协议发送方预判选档（各档的 sim 语义见类 docstring）。
         """
-        if not results or target is None:
+        if not results:
+            return None, None, 0.0
+        if self.policy == "query_top1":
+            # 接收方可复现口径：检索 top-1（不偷看 Y；sim 仅作报告不参与选择）
+            for unit, score in results:
+                if unit.embedding:
+                    sim = cosine(unit.embedding, target) if target is not None else max(score, 0.0)
+                    return unit.embedding, unit.mem_id, sim
+            return None, None, 0.0
+        if self.policy == "learned":
+            # 学习式：优先 topic 巩固原型（历史 evidence 聚合质心，接收方共享）；无原型退化 query_top1
+            for unit, _score in results:
+                if unit.kind == "experience" and unit.embedding:
+                    sim = cosine(unit.embedding, target) if target is not None else 0.0
+                    return unit.embedding, unit.mem_id, sim
+            self.policy, saved = "query_top1", self.policy
+            try:
+                return self.best_base(results, target)
+            finally:
+                self.policy = saved
+        # oracle（旧默认）：cos(candidate, Y) 择优——发送方目标感知（乐观口径，字节分列另报）
+        if target is None:
             return None, None, 0.0
         best, best_sim = None, -2.0
         for unit, _score in results:

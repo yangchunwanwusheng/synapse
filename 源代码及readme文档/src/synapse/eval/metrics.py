@@ -40,6 +40,10 @@ class Metrics:
     recovery_residual: int = 0  # 接收方经残差重构→检索恢复成功的次数
     recovery_embedding: int = 0  # 接收方经全量向量→检索恢复（含回退跳 1）的次数
     recovery_text: int = 0  # 接收方经全量文本回退（跳 2）恢复的次数
+    # ---- V3-04 ToM 选基三档字节分列（R-P0-6 口径修复：encoder-oracle 乐观载荷需另报）----
+    base_bytes_oracle: int = 0  # oracle 档（发送方以 Y 择优）非文本字节——乐观估算口径
+    base_bytes_query_top1: int = 0  # query-top1 档（接收方可复现）非文本字节——诚实口径
+    base_bytes_learned: int = 0  # learned 档（topic 原型）非文本字节——学习式口径
     frozen_snapshot_injections: int = 0  # §4.1 frozen-snapshot 记忆注入次数（保前缀缓存）
     result_spills: int = 0  # §2.3 result 序列化超阈值 → CAS 句柄 + 短摘要 的 spill 次数
     # ---- V3-02 双层计量：字节双口径 + embedding/CAS 分列（R-P0-7/11/12）----
@@ -90,6 +94,14 @@ class Metrics:
             self.tier_embedding_bytes += nb
         elif tier == "text":
             self.tier_text += 1
+        # V3-04 ToM 选基三档字节分列（真通路帧带 meta.base_policy；oracle=乐观口径须与诚实口径并报）
+        bp = msg.meta.get("base_policy")
+        if bp == "oracle":
+            self.base_bytes_oracle += nb
+        elif bp == "query_top1":
+            self.base_bytes_query_top1 += nb
+        elif bp == "learned":
+            self.base_bytes_learned += nb
         if msg.meta.get("spilled"):  # §2.3 result spill 降级
             self.result_spills += 1
 

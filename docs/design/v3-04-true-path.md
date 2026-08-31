@@ -97,4 +97,29 @@ CNR 门控：`negotiate()` 每任务真实调用，档位按 `_TIER_RANK`（与 
 
 **规划中（V3-05/V3-06 及以后）**：SharedMemoryCAS、独立接收端进程、AF_UNIX receive loop 与数据 blob 同步、keyed MAC、replay window、faiss 索引、跨进程端到端字节/延迟。
 
-**禁止的强表述**（在上述完成前）："跨进程真通路已实现"；"接收方仅靠自身记忆恢复"（现为共享 MemoryStore）；"防主动篡改/防伪造"；"完整端到端通信成本=residual bytes"（CAS/索引/记忆建立成本另计）。
+**禁止的强表述**（在上述完成前）："跨进程真通路已实现"；"接收方仅靠自身记忆恢复"（现为共享 MemoryStore）；"完整端到端通信成本=residual bytes"（CAS/索引/记忆建立成本另计）。
+
+## 7. 第二轮复审补强（2026-08-28 晚，Issue 完整闭环）
+
+用户裁决"不留问题待后续处理"后补完的 Issue checklist 项与审查遗留：
+
+- **ToM 选基三档**（`cfg.base_policy`）：oracle（发送方以 Y 择优=乐观口径）/ query_top1（检索 top-1，接收方可复现=诚实口径）/ learned（topic 巩固原型=聚合学习式）；非文本字节按档分列（`base_bytes_*`）——R-P0-6"三档另报"落地，oracle 载荷不再单独对外。
+- **三方率失真选档**：残差 / 全量向量 / 全文取最小（payload 字节同口径比较）——短文本+稠密向量场景诚实选 text 档；wire 结论按 Pareto 报告，不设档位偏好。
+- **keyed MAC**：L1 升级为会话密钥 blake2b（`key` 参数）——主动方无密钥不能重算校验和（伪造测试锁定）；跨进程密钥分发经 CNR hello 协商（路线图）。
+- **重放窗口**：已成功消费帧（key=generation:msg_id，Scheduler 跨任务 msg_id 重复须以任务代区分——实测修复）重复投递拒绝。
+- **演化链修复**：原型 self-link 消除（幂等覆盖无旧版本实体，links=()；同时消除原型被自身 supersede 而检索不到的 bug）；链接扩展允许召回 superseded 历史版本（0.3× 权重）——"沿链接扩大召回"自此真实发生。
+- **复用计数语义**：仅被消费的 top-1 计 `reuse_count`（top-k 全计为乐观口径）；扩展召回不计。
+- **CoQA 真句级 top-k**（`cfg.qa_story_mode: full|sentences`）：sentences 模式故事切句入记忆、每轮按问题检索 top-`qa_sentences_k` 句（参数自此真实生效，mock 测试锁 token 下降）；full 保留历史口径。
+
+## 8. 创新增强：JL 投影域残差（`cfg.residual_project_dim`，默认 0=关）
+
+问题：高维稠密句向量（text-embedding-3-small 1536 维）能量均匀，原域稀疏残差达标分量数 O(dim)，
+短文本场景残差大于全文（wire 负收益的物理根因）。
+
+机制（`stateplane/projection.py`）：确定性 ±1/√dim 随机投影到 k 维（JL 引理近似保持余弦几何，
+符号矩阵 seed 派生零存储共享）后，残差/索引/L2 校验全在投影域——达标分量数按维数比缩至 O(k)，
+残差字节 ≈ k/dim 倍下降；接收方基解析经同一共享投影（帧 meta.project_dim 声明，不一致即回退）；
+content_digest 身份校验仍在文本域兜底（投影域 cos 与原域存在 ~O(1/√k) 估计偏差，
+错配候选由身份校验拒绝走回退链）。mock 验证：dim=64→16 时零基残差字节显著下降且恢复成功
+（test_projection_domain_residual_shrinks_bytes）；**真实 1536 维下的字节收益与恢复质量
+Pareto 需真实 API 实验确认**（候选：proj_dim 256/384/512 扫描）。

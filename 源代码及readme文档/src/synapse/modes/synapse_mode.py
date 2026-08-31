@@ -8,6 +8,7 @@
 
 from __future__ import annotations
 
+import hashlib
 import time
 import uuid
 
@@ -54,6 +55,11 @@ class SynapseSession:
         self.vec_index = VectorIndex()  # V3-04：文本句柄↔量化向量（接收方恢复面）
         self.generation = 0  # V3-04：任务代（L1 绑定任务代，检测跨代陈旧 packet）
         self.session_id = uuid.uuid4().hex[:16]  # V3-04：L1 会话域（防跨会话重放）
+        # L1 认证密钥（审查遗留闭环）：keyed blake2b MAC——主动方无 key 不能重算校验和；
+        # 同进程自动共享，跨进程经 CNR hello 协商（路线图，设计文档 §6）
+        self._mac_key = hashlib.blake2b(uuid.uuid4().bytes, digest_size=32).digest()
+        self._consumed_frames: set[str] = set()  # 重放窗口：已成功消费的帧 msg_id（重复投递拒绝）
+        self._proj = None  # JL 投影器（cfg.residual_project_dim > 0 时惰性构建，发送/接收共享）
         self.consolidator = Consolidator(cfg)
 
     def run_task(self, task) -> dict:
@@ -279,29 +285,39 @@ class SynapseSession:
         """
         cfg = self.cfg
         gen = self.generation
-        Y_q = quantize_vec(Y, self.codec.grid)
+        # 投影域（创新增强，默认关）：残差/索引在 JL 投影域——高维稠密向量下残差字节≈按维数比下降
+        proj = self._projection_for(len(Y))
+        Y_enc = proj.project(Y) if proj else Y
+        b_enc = proj.project(b_hat) if (proj and b_hat is not None) else b_hat
+        Y_q = quantize_vec(Y_enc, self.codec.grid)
         vec_bytes = serialize_base(Y_q)  # embedding 档全量 packet（率失真比较 + 回退跳 1 共用）
         full_vec_wire = len(vec_bytes) + 12
+        text_wire = len(evidence.encode("utf-8")) + 12  # text 档载荷（正文+头/校验记账，同口径比较）
         content_digest = digest_bytes(evidence.encode("utf-8"))
         # 恢复面先行：文本句柄 ↔ 量化向量（接收方检索恢复的出口；帧本身不携带全文句柄）
         self.vec_index.put(text_handle, Y_q)
 
         negotiated = sched.cnr.negotiate(retr.agent_id, summ.agent_id)  # R-P0-4：真实协商驱动选档
         has_base = b_hat is not None and base_sim > 0.0
+        pkt = None
         if cfg.abl_no_residual:
             intended = "embedding"  # R-P0-3：消融=真发全量向量 packet，数据路径分叉而非改账
-        elif not has_base:
-            intended = "residual_zero"  # 冷启动诚实标档：零基残差，收缩序列的合法起点
         else:
-            # 率失真选档（审查修复：弱基不再无条件发全量）：残差超过全量向量才换 embedding，
-            # 保证 residual 路径字节恒不劣于 embedding 路径（signal KC-1 真实 API 回归的根因修复）
-            trial = self.codec.encode(Y, b_hat, base_id, gen)
-            intended = "residual" if trial.size_bytes() <= full_vec_wire else "embedding"
+            # 三方率失真选档（GPT 闭环遗留）：残差 vs 全量向量 vs 全文取最小——协议对载荷形态
+            # 全局最优；短文本场景诚实选 text 档（字节数是物理事实，不以档位偏好掩盖）
+            pkt = self.codec.encode(Y_enc, b_enc if has_base else None, base_id if has_base else "", gen)
+            intended = (
+                ("residual" if has_base else "residual_zero")
+                if pkt.size_bytes() <= min(full_vec_wire, text_wire)
+                else ("embedding" if full_vec_wire <= text_wire else "text")
+            )
         cap = self._TIER_RANK.get(negotiated, 0)
         tier = intended if self._TIER_RANK[intended] <= cap else ("embedding" if cap >= 1 else "text")
 
         def _checksum(payload: bytes, base_ref: str, pk: str) -> str:
-            return digest_packet(payload, base_ref, gen, self.session_id, pk, content_digest)
+            return digest_packet(
+                payload, base_ref, gen, self.session_id, pk, content_digest, key=self._mac_key
+            )
 
         def _data_frame(payload_handle, base_ref, pk, checksum, nontext, nnz_, tier_):
             return Message(
@@ -319,6 +335,8 @@ class SynapseSession:
                     "generation": gen,
                     "content_digest": content_digest,
                     "dim": len(Y_q),
+                    "base_policy": self.tom.policy,  # V3-04 ToM 选基三档（字节按档分列报告）
+                    "project_dim": proj.proj_dim if proj else 0,  # 投影域残差（0=原域）
                 },
             )
 
@@ -333,7 +351,12 @@ class SynapseSession:
                 payload_kind="text",
                 text=evidence,
                 checksum=_checksum(evidence.encode("utf-8"), "", "text"),
-                meta={"tier": "text", "generation": gen, "content_digest": content_digest},
+                meta={
+                    "tier": "text",
+                    "generation": gen,
+                    "content_digest": content_digest,
+                    "base_policy": self.tom.policy,
+                },
             )
         elif tier == "embedding":
             vec_handle = self.cas.put(vec_bytes)
@@ -347,9 +370,10 @@ class SynapseSession:
                 "embedding",
             )
             nnz = len(Y_q)
-        else:  # residual / residual_zero
+        else:  # residual / residual_zero（pkt 已在率失真试编码时算出，编码域=投影域）
             base_ref = base_id if b_hat is not None else ""  # mem_id：接收方从自身记忆解析
-            pkt = self.codec.encode(Y, b_hat, base_ref, gen)
+            if pkt is None:
+                pkt = self.codec.encode(Y_enc, b_enc if b_hat is not None else None, base_ref, gen)
             res_handle = self.cas.put(pkt.residual)
             frame = _data_frame(
                 res_handle,
@@ -415,11 +439,12 @@ class SynapseSession:
     def _receive_frame(self, msg, m) -> tuple[str | None, str | None]:
         """接收方恢复：仅凭线缆帧字段（payload_kind/handles/checksum/meta/text）驱动。
 
-        - text 帧：L1（域含 payload=正文字节）+ content_digest 身份校验后消费。
-        - residual/embedding 帧：L1 完整性（可复算哈希）→ residual 按句柄从自身记忆解析
-          预测基（缺失/维度不符→回退）→ 重构 → L2 余弦检索 + content_digest 身份校验。
-        strict 下 content_digest 为强制不变量（缺失/畸形即校验失败，不降级放行）。
-        任何失败（含畸形帧解析）统一返回 (None, None) 由调用方走回退链，绝不崩溃。
+        - text 帧：L1（keyed MAC，域含正文字节）+ content_digest 身份校验后消费。
+        - residual/embedding 帧：L1（keyed MAC）→ residual 按句柄从自身记忆解析预测基
+          （缺失/维度不符→回退；投影域时基经同一共享投影）→ 重构 → L2 余弦检索 +
+          content_digest 身份校验。
+        - 重放窗口：已成功消费的帧（msg_id）重复投递直接拒绝（审查遗留闭环）。
+        strict 下 content_digest 为强制不变量；任何失败统一返回 (None, None) 走回退链。
         """
         cfg = self.cfg
         strict = not cfg.abl_no_checksum
@@ -428,6 +453,10 @@ class SynapseSession:
             gen = int(meta.get("generation", 0))
         except (TypeError, ValueError):
             return None, None
+        # 重放窗口：key=任务代:帧id（Scheduler 每任务重建、msg_id 跨任务重复，须以 generation 区分）
+        frame_key = f"{gen}:{msg.msg_id}"
+        if strict and frame_key in self._consumed_frames:
+            return None, None
         cd = meta.get("content_digest")
         if strict and not _valid_content_digest(cd):  # 身份绑定为不变量，非可选附加字段
             return None, None
@@ -435,12 +464,15 @@ class SynapseSession:
             if msg.text is None:
                 return None, None
             tb = msg.text.encode("utf-8", errors="strict")
-            # text 帧 L1：payload=正文字节（与发送方 _checksum(evidence, "", "text") 对称）
-            if strict and not verify_packet(tb, "", gen, msg.checksum, self.session_id, "text", cd):
+            # text 帧 L1（keyed MAC）：payload=正文字节（与发送方 _checksum(evidence, "", "text") 对称）
+            if strict and not verify_packet(
+                tb, "", gen, msg.checksum, self.session_id, "text", cd, key=self._mac_key
+            ):
                 return None, None
             if strict and digest_bytes(tb) != cd:  # 显式身份比对（L1 域已绑定，防御深度）
                 return None, None
             m.recovery_text += 1
+            self._consumed_frames.add(frame_key)
             return msg.text, "text"
         try:
             hs = tuple(msg.handles or ())
@@ -450,7 +482,14 @@ class SynapseSession:
             if payload is None:
                 return None, None
             if strict and not verify_packet(
-                payload, base_ref, gen, msg.checksum, self.session_id, msg.payload_kind, cd
+                payload,
+                base_ref,
+                gen,
+                msg.checksum,
+                self.session_id,
+                msg.payload_kind,
+                cd,
+                key=self._mac_key,
             ):
                 return None, None
             if msg.payload_kind == "residual":
@@ -458,11 +497,18 @@ class SynapseSession:
                 if base_ref:  # 记忆是解码端边信息：接收方从自身 MemoryStore 解析预测基
                     unit = self.store.get(base_ref)
                     emb = unit.embedding if unit is not None else None
-                    if emb is None or len(emb) != dim:
-                        return None, None  # 基缺失/维度不符 → 受控回退
+                    if emb is None:
+                        return None, None  # 基缺失 → 受控回退
+                    proj = self._projection_for(len(emb))
+                    if proj is not None:  # 投影域残差：基经同一共享投影（帧 meta.project_dim 声明）
+                        if int(meta.get("project_dim", 0)) != proj.proj_dim:
+                            return None, None  # 投影域协商不一致 → 回退
+                        emb = proj.project(emb)
+                    if len(emb) != dim:
+                        return None, None  # 维度不符（含投影后）→ 受控回退
                     bq_recv = quantize_vec(emb, self.codec.grid)
                 else:
-                    bq_recv = [0] * dim  # 零基冷启动
+                    bq_recv = [0] * dim  # 零基冷启动（dim=投影域维数）
                 yq_hat = self.codec.decode_bytes(payload, bq_recv, dim)
             elif msg.payload_kind == "embedding":
                 yq_hat = deserialize_base(payload)
@@ -474,7 +520,7 @@ class SynapseSession:
         if not hits:
             return None, None
         h, sim = hits[0]
-        if strict and sim < cfg.verify_threshold:  # L2 语义校验（基失配/裁剪失真）
+        if strict and sim < cfg.verify_threshold:  # L2 语义校验（投影域/基失配/裁剪失真）
             return None, None
         data = self.cas.get(h)
         if data is None:
@@ -486,8 +532,20 @@ class SynapseSession:
             text = data.decode("utf-8")
         except UnicodeDecodeError:
             return None, None
+        self._consumed_frames.add(frame_key)
         if msg.payload_kind == "residual":
             m.recovery_residual += 1
             return text, "residual"
         m.recovery_embedding += 1
         return text, "embedding"
+
+    def _projection_for(self, dim: int):
+        """按配置惰性构建共享 JL 投影器（residual_project_dim=0 或 ≥dim 时返回 None=原域）。"""
+        pd = getattr(self.cfg, "residual_project_dim", 0)
+        if pd <= 0 or pd >= dim:
+            return None
+        if self._proj is None or self._proj.dim != dim:
+            from ..stateplane.projection import Projection
+
+            self._proj = Projection(dim, pd)
+        return self._proj

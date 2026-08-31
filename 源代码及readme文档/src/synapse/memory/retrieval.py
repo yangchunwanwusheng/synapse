@@ -1,4 +1,5 @@
 """混合检索（赛题 M6：关键词 + 标签 + 语义相似度，跨 Agent 跨任务复用）。"""
+
 from __future__ import annotations
 
 from ..stateplane.embedding import cosine
@@ -15,10 +16,13 @@ class HybridRetriever:
         self._cfg = cfg
 
     def search(self, query: str, tags=None, k: int | None = None):
-        """返回 [(unit, score)]，按融合分降序，命中单元 reuse_count += 1。
+        """返回 [(unit, score)]，按融合分降序；仅被消费的 top-1 计 reuse_count。
 
-        §3.1 演化链：默认过滤已被取代（superseded_by 非空）的单元；命中单元的 links 指向的
-        关联单元以小权重补进候选集（A-MEM 风格链接扩展），扩大有效召回而不引入过时记忆。
+        §3.1 演化链（V3-04 附带修复）：主结果默认过滤已被取代单元；命中单元的 links 指向的
+        **历史版本（superseded）**以 0.3× 原分补进候选集——演化链上的旧版本正是链接扩展
+        要召回的内容（彻查 P1-1：旧条件拒收 superseded 节点导致"沿链接扩大召回"从未发生）。
+        复用计数语义（彻查 P1-3）：top-k 全部 +1 是乐观口径；改为 top-1（被实际消费方）
+        计复用，链接扩展单元不计。
         """
         k = k or self._cfg.retrieval_k
         units = self._store.all()
@@ -29,8 +33,9 @@ class HybridRetriever:
         q_emb = self._embedder.encode(query)
         c = self._cfg
 
-        active = [u for u in units if u.superseded_by is None]  # 默认不返回已取代单元
+        active = [u for u in units if u.superseded_by is None]  # 主结果不返回已取代单元
         by_id = {u.mem_id: u for u in units}
+        scored_ids: set[str] = set()
         scored = []
         for u in active:
             kw = _jaccard(q_tokens, _tokens(u.content + " " + u.task_topic))
@@ -38,23 +43,24 @@ class HybridRetriever:
             sem = cosine(q_emb, u.embedding) if u.embedding else 0.0
             score = c.w_keyword * kw + c.w_tag * tg + c.w_semantic * sem
             scored.append((u, score))
+            scored_ids.add(u.mem_id)
 
-        # 链接扩展：命中单元的 links（被取代的旧版本/相关单元）以 0.3× 原分补进，若仍活跃
+        # 链接扩展：命中单元的 links（被取代的历史版本/相关单元）以 0.3× 原分补进
         link_extra: dict[str, float] = {}
         for u, s in scored:
             if s <= 0 or not u.links:
                 continue
             for lid in u.links:
                 lu = by_id.get(lid)
-                if lu and lu.superseded_by is None and lid not in {x.mem_id for x, _ in scored}:
+                if lu and lid not in scored_ids:
                     link_extra[lid] = max(link_extra.get(lid, 0.0), s * 0.3)
         for lid, sc in link_extra.items():
             scored.append((by_id[lid], sc))
 
         scored.sort(key=lambda x: x[1], reverse=True)
         top = [(u, s) for u, s in scored[:k] if s > 0]
-        for u, _ in top:
-            u.reuse_count += 1
+        if top:
+            top[0][0].reuse_count += 1  # 仅 top-1（被消费方）计复用；扩展单元不计
         return top
 
 

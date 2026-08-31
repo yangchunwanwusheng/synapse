@@ -161,24 +161,38 @@ def test_memory_supersede_chain():
     emb = HashEmbedder(Config().embed_dim)
     # 先写一条
     u1 = store.write(
-        source_agent="r", task_topic="alpha", summary="s", content="alpha beta gamma evidence",
-        kind="evidence", supersede_threshold=0.5,
+        source_agent="r",
+        task_topic="alpha",
+        summary="s",
+        content="alpha beta gamma evidence",
+        kind="evidence",
+        supersede_threshold=0.5,
     )
     assert u1.superseded_by is None
     # 写入高度相似（同 topic+kind，cosine 高）→ 旧 u1 被标记取代
     u2 = store.write(
-        source_agent="r", task_topic="alpha", summary="s", content="alpha beta gamma evidence updated",
-        kind="evidence", supersede_threshold=0.5,
+        source_agent="r",
+        task_topic="alpha",
+        summary="s",
+        content="alpha beta gamma evidence updated",
+        kind="evidence",
+        supersede_threshold=0.5,
     )
     assert u2.links == (u1.mem_id,), "新单元 links 应继承被取代的旧单元"
     assert store.get(u1.mem_id).superseded_by == u2.mem_id, "旧单元应被标记为已取代"
-    # 检索默认不返回已取代单元
+    # 检索主结果只含活跃单元；已取代单元经活跃单元的 links 以 0.3 权重扩展召回（演化链扩大召回，
+    # V3-04 附带修复：旧条件拒收 superseded 节点导致"沿链接扩大召回"从未发生——基线差量见 commit）
     from synapse.memory.retrieval import HybridRetriever
+
     retr = HybridRetriever(store, emb, Config())
     hits = retr.search("alpha", k=5)
     hit_ids = {u.mem_id for u, _ in hits}
-    assert u1.mem_id not in hit_ids, "已取代单元不应出现在检索结果"
     assert u2.mem_id in hit_ids, "活跃单元应可被检索"
+    assert u1.mem_id in hit_ids, "历史版本应经链接扩展召回（演化链生效）"
+    scores = dict((u.mem_id, s) for u, s in hits)
+    assert scores[u2.mem_id] > scores[u1.mem_id], "扩展权重(0.3x)应低于直接命中"
+    # 复用计数语义（V3-04）：仅被消费的 top-1 计复用，扩展召回单元不计
+    assert u2.reuse_count >= 1 and u1.reuse_count == 0
 
 
 if __name__ == "__main__":
