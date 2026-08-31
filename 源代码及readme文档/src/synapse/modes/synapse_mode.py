@@ -58,7 +58,8 @@ class SynapseSession:
         # L1 认证密钥（审查遗留闭环）：keyed blake2b MAC——主动方无 key 不能重算校验和；
         # 同进程自动共享，跨进程经 CNR hello 协商（路线图，设计文档 §6）
         self._mac_key = hashlib.blake2b(uuid.uuid4().bytes, digest_size=32).digest()
-        self._consumed_frames: set[str] = set()  # 重放窗口：已成功消费的帧 msg_id（重复投递拒绝）
+        # 重放窗口：已成功消费帧 key=generation:msg_id（dict 保序；超限淘汰最老一半保持有界）
+        self._consumed_frames: dict[str, None] = {}
         self._proj = None  # JL 投影器（cfg.residual_project_dim > 0 时惰性构建，发送/接收共享）
         self.consolidator = Consolidator(cfg)
 
@@ -299,13 +300,14 @@ class SynapseSession:
 
         negotiated = sched.cnr.negotiate(retr.agent_id, summ.agent_id)  # R-P0-4：真实协商驱动选档
         has_base = b_hat is not None and base_sim > 0.0
+        base_ref = base_id if has_base else ""  # 基引用统一判据（试编码与发送帧一致）
         pkt = None
         if cfg.abl_no_residual:
             intended = "embedding"  # R-P0-3：消融=真发全量向量 packet，数据路径分叉而非改账
         else:
             # 三方率失真选档（GPT 闭环遗留）：残差 vs 全量向量 vs 全文取最小——协议对载荷形态
             # 全局最优；短文本场景诚实选 text 档（字节数是物理事实，不以档位偏好掩盖）
-            pkt = self.codec.encode(Y_enc, b_enc if has_base else None, base_id if has_base else "", gen)
+            pkt = self.codec.encode(Y_enc, b_enc if has_base else None, base_ref, gen)
             intended = (
                 ("residual" if has_base else "residual_zero")
                 if pkt.size_bytes() <= min(full_vec_wire, text_wire)
@@ -315,8 +317,18 @@ class SynapseSession:
         tier = intended if self._TIER_RANK[intended] <= cap else ("embedding" if cap >= 1 else "text")
 
         def _checksum(payload: bytes, base_ref: str, pk: str) -> str:
+            # 认证域含 pk:dim:project_dim（解释 payload 的关键元数据须防篡改；GPT 终审）；
+            # tag 128bit（认证场景不用 64bit）
+            domain = f"{pk}:{len(Y_q)}:{proj.proj_dim if proj else 0}"
             return digest_packet(
-                payload, base_ref, gen, self.session_id, pk, content_digest, key=self._mac_key
+                payload,
+                base_ref,
+                gen,
+                self.session_id,
+                domain,
+                content_digest,
+                size=16,
+                key=self._mac_key,
             )
 
         def _data_frame(payload_handle, base_ref, pk, checksum, nontext, nnz_, tier_):
@@ -356,6 +368,8 @@ class SynapseSession:
                     "generation": gen,
                     "content_digest": content_digest,
                     "base_policy": self.tom.policy,
+                    "dim": len(Y_q),  # 认证域对称（接收方按 pk:dim:project_dim 构造）
+                    "project_dim": proj.proj_dim if proj else 0,
                 },
             )
         elif tier == "embedding":
@@ -371,9 +385,7 @@ class SynapseSession:
             )
             nnz = len(Y_q)
         else:  # residual / residual_zero（pkt 已在率失真试编码时算出，编码域=投影域）
-            base_ref = base_id if b_hat is not None else ""  # mem_id：接收方从自身记忆解析
-            if pkt is None:
-                pkt = self.codec.encode(Y_enc, b_enc if b_hat is not None else None, base_ref, gen)
+            # base_ref 已在选档前统一（has_base 判据，与试编码一致）；消融路径 pkt=None 不会到这
             res_handle = self.cas.put(pkt.residual)
             frame = _data_frame(
                 res_handle,
@@ -430,6 +442,8 @@ class SynapseSession:
                         "tier": "text",
                         "generation": gen,
                         "content_digest": content_digest,
+                        "dim": len(Y_q),  # 认证域对称（接收方按 pk:dim:project_dim 构造）
+                        "project_dim": proj.proj_dim if proj else 0,
                     },
                 )
                 sched.send(fb2)
@@ -457,6 +471,12 @@ class SynapseSession:
         frame_key = f"{gen}:{msg.msg_id}"
         if strict and frame_key in self._consumed_frames:
             return None, None
+        if len(self._consumed_frames) > 10000:  # 有界重放窗口：淘汰最老一半
+            for old in list(self._consumed_frames)[: len(self._consumed_frames) // 2]:
+                del self._consumed_frames[old]
+        # 代有效性：同会话只接受当前任务代的帧（旧代帧即便 MAC 合法也拒绝——GPT 终审）
+        if strict and gen != self.generation:
+            return None, None
         cd = meta.get("content_digest")
         if strict and not _valid_content_digest(cd):  # 身份绑定为不变量，非可选附加字段
             return None, None
@@ -464,15 +484,25 @@ class SynapseSession:
             if msg.text is None:
                 return None, None
             tb = msg.text.encode("utf-8", errors="strict")
-            # text 帧 L1（keyed MAC）：payload=正文字节（与发送方 _checksum(evidence, "", "text") 对称）
+            # text 帧 L1（keyed MAC，128bit）：domain 与发送方对称（pk:dim:project_dim）
+            dim_meta = int(meta.get("dim", 0) or 0)
+            domain = f"text:{dim_meta}:{int(meta.get('project_dim', 0) or 0)}"
             if strict and not verify_packet(
-                tb, "", gen, msg.checksum, self.session_id, "text", cd, key=self._mac_key
+                tb,
+                "",
+                gen,
+                msg.checksum,
+                self.session_id,
+                domain,
+                cd,
+                size=16,
+                key=self._mac_key,
             ):
                 return None, None
             if strict and digest_bytes(tb) != cd:  # 显式身份比对（L1 域已绑定，防御深度）
                 return None, None
             m.recovery_text += 1
-            self._consumed_frames.add(frame_key)
+            self._consumed_frames[frame_key] = None
             return msg.text, "text"
         try:
             hs = tuple(msg.handles or ())
@@ -481,28 +511,33 @@ class SynapseSession:
             payload = self.cas.get(payload_handle)
             if payload is None:
                 return None, None
+            # 投影域一致性（GPT 终审：全非文本帧校验，不限于带基 residual）：
+            # 帧声明 project_dim 须与本会话激活投影一致；dim/project_dim 与 pk 同入 MAC 认证域
+            dim = int(meta.get("dim", 0))
+            pd_meta = int(meta.get("project_dim", 0) or 0)
+            if pd_meta != getattr(self.cfg, "residual_project_dim", 0):
+                return None, None
+            domain = f"{msg.payload_kind}:{dim}:{pd_meta}"
             if strict and not verify_packet(
                 payload,
                 base_ref,
                 gen,
                 msg.checksum,
                 self.session_id,
-                msg.payload_kind,
+                domain,
                 cd,
+                size=16,
                 key=self._mac_key,
             ):
                 return None, None
             if msg.payload_kind == "residual":
-                dim = int(meta.get("dim", 0))
                 if base_ref:  # 记忆是解码端边信息：接收方从自身 MemoryStore 解析预测基
                     unit = self.store.get(base_ref)
                     emb = unit.embedding if unit is not None else None
                     if emb is None:
                         return None, None  # 基缺失 → 受控回退
                     proj = self._projection_for(len(emb))
-                    if proj is not None:  # 投影域残差：基经同一共享投影（帧 meta.project_dim 声明）
-                        if int(meta.get("project_dim", 0)) != proj.proj_dim:
-                            return None, None  # 投影域协商不一致 → 回退
+                    if proj is not None:  # 投影域残差：基经同一共享投影（一致性已在上面统一校验）
                         emb = proj.project(emb)
                     if len(emb) != dim:
                         return None, None  # 维度不符（含投影后）→ 受控回退
@@ -532,7 +567,7 @@ class SynapseSession:
             text = data.decode("utf-8")
         except UnicodeDecodeError:
             return None, None
-        self._consumed_frames.add(frame_key)
+        self._consumed_frames[frame_key] = None
         if msg.payload_kind == "residual":
             m.recovery_residual += 1
             return text, "residual"
@@ -544,7 +579,7 @@ class SynapseSession:
         pd = getattr(self.cfg, "residual_project_dim", 0)
         if pd <= 0 or pd >= dim:
             return None
-        if self._proj is None or self._proj.dim != dim:
+        if self._proj is None or self._proj.dim != dim or self._proj.proj_dim != pd:
             from ..stateplane.projection import Projection
 
             self._proj = Projection(dim, pd)

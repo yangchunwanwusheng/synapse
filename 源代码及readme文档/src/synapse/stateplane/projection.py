@@ -29,21 +29,25 @@ class Projection:
         self.proj_dim = proj_dim
         self.seed = seed
         self._scale = 1.0 / math.sqrt(dim)
-        self._rows: dict[int, list[int]] = {}
+        self._rows: dict[int, bytes] = {}  # bit-packed 符号位图（k 行 × dim/8 字节）
 
-    def _row(self, i: int) -> list[int]:
-        """第 i 行符号向量（±1），seed 派生确定性生成，行级缓存。"""
+    def _row(self, i: int) -> bytes:
+        """第 i 行符号位图（bit-packed，bit=1 → +1），blake2b 流式扩展生成，行级缓存。"""
         row = self._rows.get(i)
         if row is None:
-            row = [
-                1 if hashlib.blake2b(f"{self.seed}:{i}:{j}".encode(), digest_size=4).digest()[0] & 1 else -1
-                for j in range(self.dim)
-            ]
+            buf = bytearray()
+            ctr = 0
+            while len(buf) * 8 < self.dim:
+                buf += hashlib.blake2b(
+                    f"{self.seed}:{i}:{ctr}".encode(), digest_size=64
+                ).digest()
+                ctr += 1
+            row = bytes(buf[: (self.dim + 7) // 8])
             self._rows[i] = row
         return row
 
     def project(self, vec: list[float]) -> list[float]:
-        """投影并归一化（量化/余弦口径与原域一致）。维度不符显式失败。"""
+        """投影并归一化（余弦检索域口径；原始长度信息不保留——见类 docstring 诚实边界）。"""
         if len(vec) != self.dim:
             raise ValueError(f"projection dim mismatch: {len(vec)} != {self.dim}")
         out = []
@@ -51,7 +55,7 @@ class Projection:
             row = self._row(i)
             s = 0.0
             for j in range(self.dim):
-                if row[j] > 0:
+                if (row[j >> 3] >> (j & 7)) & 1:
                     s += vec[j]
                 else:
                     s -= vec[j]

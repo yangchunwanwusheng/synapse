@@ -160,7 +160,7 @@ def run_synapse(conv: Conversation, cfg) -> dict:
         recent_ids = {str(turn.idx - 1 - j) for j in range(win)}
         sem_hits = []
         if len(history) > win:
-            for u, s in retr.search(turn.q, k=sem + win):
+            for u, s in retr.search(turn.q, k=sem + win, consume_k=sem):
                 if u.kind == "conclusion" and u.task_id not in recent_ids and s > cfg.hit_threshold:
                     sem_hits.append(u)
                 if len(sem_hits) >= sem:
@@ -169,7 +169,10 @@ def run_synapse(conv: Conversation, cfg) -> dict:
         # 句级检索（sentences 模式）：按当前问题检索故事句 top-k（qa_sentences_k 真实生效）
         sent_hits = []
         if story_mode == "sentences":
-            for u, s in retr.search(turn.q, tags=("story",), k=cfg.qa_sentences_k + len(sem_hits)):
+            for u, s in retr.search(
+                turn.q, tags=("story",), k=cfg.qa_sentences_k + len(sem_hits),
+                consume_k=cfg.qa_sentences_k,
+            ):
                 if "sent" in u.tags and len(sent_hits) < cfg.qa_sentences_k:
                     sent_hits.append(u)
         # 非文本/结构化消息：传句柄(故事句/整段 + 选中历史)，不在 agent 间消息里重述全文（M2/M4）

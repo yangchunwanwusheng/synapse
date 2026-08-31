@@ -19,6 +19,7 @@ class Config:
     n_facts: int = 40  # Retriever "长证据"事实条数（放大纯文本透传冗余；配置驱动）
 
     # ---- 检索 / 记忆 ----
+    retrieval_semantics: str = "v3-04"  # 检索语义版本（v3-04 起：链接扩展召回历史版本 + 复用计数=被消费前 k 个）；历史 run（pre-v3-04）不可与本版本横向比较（manifest 落档）
     retrieval_k: int = 5
     hit_threshold: float = 0.15  # 检索 top 分 > 阈值 记为记忆命中
     w_keyword: float = 0.3  # 混合检索权重

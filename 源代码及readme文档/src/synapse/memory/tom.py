@@ -36,24 +36,19 @@ class ToMPredictor:
         """
         if not results:
             return None, None, 0.0
-        if self.policy == "query_top1":
-            # 接收方可复现口径：检索 top-1（不偷看 Y；sim 仅作报告不参与选择）
-            for unit, score in results:
-                if unit.embedding:
-                    sim = cosine(unit.embedding, target) if target is not None else max(score, 0.0)
-                    return unit.embedding, unit.mem_id, sim
-            return None, None, 0.0
         if self.policy == "learned":
             # 学习式：优先 topic 巩固原型（历史 evidence 聚合质心，接收方共享）；无原型退化 query_top1
             for unit, _score in results:
                 if unit.kind == "experience" and unit.embedding:
                     sim = cosine(unit.embedding, target) if target is not None else 0.0
                     return unit.embedding, unit.mem_id, sim
-            self.policy, saved = "query_top1", self.policy
-            try:
-                return self.best_base(results, target)
-            finally:
-                self.policy = saved
+        if self.policy in ("query_top1", "learned"):
+            # query_top1（或 learned 无原型退化）：检索 top-1，不偷看 Y（sim 仅报告不参与选择）
+            for unit, score in results:
+                if unit.embedding:
+                    sim = cosine(unit.embedding, target) if target is not None else max(score, 0.0)
+                    return unit.embedding, unit.mem_id, sim
+            return None, None, 0.0
         # oracle（旧默认）：cos(candidate, Y) 择优——发送方目标感知（乐观口径，字节分列另报）
         if target is None:
             return None, None, 0.0

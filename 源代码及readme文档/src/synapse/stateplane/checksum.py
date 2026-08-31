@@ -9,6 +9,7 @@ generation)，只含线缆双方可见内容，接收方可复算；拦截传输
 from __future__ import annotations
 
 import hashlib
+import hmac
 
 
 def digest_ints(ints, size: int = 8) -> str:
@@ -69,10 +70,13 @@ def verify_packet(
     session_id: str = "",
     domain: str = "",
     content_digest: str = "",
+    size: int = 8,
     key: bytes | None = None,
 ) -> bool:
     """接收方复算 L1：仅凭线缆可见内容（+会话密钥）比对。"""
-    return (
-        digest_packet(payload, base_handle, generation, session_id, domain, content_digest, key=key)
-        == checksum
-    )
+    return hmac.compare_digest(
+        digest_packet(
+            payload, base_handle, generation, session_id, domain, content_digest, size=size, key=key
+        ),
+        checksum,
+    )  # 常量时间比较（防时序侧信道）

@@ -627,6 +627,31 @@ def test_replay_window_rejects_duplicate_frame():
     assert res2["final_recovery_ok"], "跨任务同帧 id 不得被重放窗口误拒（key 含 generation）"
 
 
+def test_duplicate_frame_delivery_rejected():
+    # GPT 终审：同帧二次投递必须直接拒绝（重放窗口直测；上测仅覆盖跨任务同 id 不误伤）
+    from synapse.eval.metrics import Metrics
+    from synapse.protocol.messages import ActionType, Message
+
+    cfg = Config(residual_true_path=True)
+    session = SynapseSession(cfg)
+    session.generation = 1  # 模拟已进入任务代 1
+    text = "frame under test"
+    cd = digest_bytes(text.encode("utf-8"))
+    from synapse.stateplane.checksum import digest_packet
+
+    ck = digest_packet(text.encode("utf-8"), "", 1, session.session_id, "text:64:0",
+                       cd, size=16, key=session._mac_key)
+    msg = Message("dup-1", "r", "s", ActionType.TELL.value, payload_kind="text", text=text,
+                  checksum=ck, meta={"generation": 1, "content_digest": cd, "dim": 64,
+                                     "project_dim": 0})
+    m = Metrics()
+    first = session._receive_frame(msg, m)
+    assert first == (text, "text"), "首投应成功"
+    second = session._receive_frame(msg, m)
+    assert second == (None, None), "同帧二次投递必须被重放窗口拒绝"
+    assert m.recovery_text == 1, "重复帧不得重复计数"
+
+
 def test_projection_domain_residual_shrinks_bytes():
     # 创新增强：JL 投影域残差——dim=64→16 时残差字节按维数比显著下降且恢复成功（身份校验兜底）
     cfg_plain = Config(residual_true_path=True)

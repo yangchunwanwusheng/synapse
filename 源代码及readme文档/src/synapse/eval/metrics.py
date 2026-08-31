@@ -95,7 +95,7 @@ class Metrics:
         elif tier == "text":
             self.tier_text += 1
         # V3-04 ToM 选基三档字节分列（真通路帧带 meta.base_policy；oracle=乐观口径须与诚实口径并报）
-        bp = msg.meta.get("base_policy")
+        bp = msg.meta.get("base_policy") if nb else None  # 仅非文本帧计入（text 帧 nb=0 不污染分列）
         if bp == "oracle":
             self.base_bytes_oracle += nb
         elif bp == "query_top1":

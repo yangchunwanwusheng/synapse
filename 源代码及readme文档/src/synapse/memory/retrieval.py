@@ -15,14 +15,14 @@ class HybridRetriever:
         self._embedder = embedder
         self._cfg = cfg
 
-    def search(self, query: str, tags=None, k: int | None = None):
+    def search(self, query: str, tags=None, k: int | None = None, consume_k: int = 1):
         """返回 [(unit, score)]，按融合分降序；仅被消费的 top-1 计 reuse_count。
 
         §3.1 演化链（V3-04 附带修复）：主结果默认过滤已被取代单元；命中单元的 links 指向的
         **历史版本（superseded）**以 0.3× 原分补进候选集——演化链上的旧版本正是链接扩展
         要召回的内容（彻查 P1-1：旧条件拒收 superseded 节点导致"沿链接扩大召回"从未发生）。
-        复用计数语义（彻查 P1-3）：top-k 全部 +1 是乐观口径；改为 top-1（被实际消费方）
-        计复用，链接扩展单元不计。
+        复用计数语义（彻查 P1-3 + GPT 终审）：默认仅 top-1 计复用；调用方实际消费 k 个单元时
+        显式传 consume_k=k（如 CoQA 句级/历史检索），链接扩展单元不计。
         """
         k = k or self._cfg.retrieval_k
         units = self._store.all()
@@ -59,8 +59,8 @@ class HybridRetriever:
 
         scored.sort(key=lambda x: x[1], reverse=True)
         top = [(u, s) for u, s in scored[:k] if s > 0]
-        if top:
-            top[0][0].reuse_count += 1  # 仅 top-1（被消费方）计复用；扩展单元不计
+        for u, _s in top[: max(0, consume_k)]:
+            u.reuse_count += 1  # 仅被消费的前 consume_k 个计复用；扩展单元不计
         return top
 
 
