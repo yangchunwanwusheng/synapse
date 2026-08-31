@@ -120,6 +120,18 @@ CNR 门控：`negotiate()` 每任务真实调用，档位按 `_TIER_RANK`（与 
 符号矩阵 seed 派生零存储共享）后，残差/索引/L2 校验全在投影域——达标分量数按维数比缩至 O(k)，
 残差字节 ≈ k/dim 倍下降；接收方基解析经同一共享投影（帧 meta.project_dim 声明，不一致即回退）；
 content_digest 身份校验仍在文本域兜底（投影域 cos 与原域存在 ~O(1/√k) 估计偏差，
-错配候选由身份校验拒绝走回退链）。mock 验证：dim=64→16 时零基残差字节显著下降且恢复成功
-（test_projection_domain_residual_shrinks_bytes）；**真实 1536 维下的字节收益与恢复质量
-Pareto 需真实 API 实验确认**（候选：proj_dim 256/384/512 扫描）。
+错配候选由身份校验拒绝走回退链）。
+
+**真实 API 实测（2026-08-31，qwen3-235b + text-embedding-3-small 1536 维，signal 5+5 轮/点，
+runs/signal_20260831_*）**：
+
+| proj_dim | wire 节省 | 关联族收缩 | 因果比 | 恢复/回退 |
+|----------|-----------|------------|--------|-----------|
+| 0（原域） | -21.4%（三方率失真后） | 0→759B 反向 | WARN | 5/5（2res+3text）/ 0 |
+| 256 | +26.2% | -11.9% | 0.78 | 5/5（4res+1emb）/ 1 |
+| **384（建议 operating point）** | **+25.1%** | **+64.3%** | **0.27** | **5/5 全 residual / 0** |
+| 512 | +18.8% | +54.3% | 0.40 | 5/5 全 residual / 0 |
+
+原域残差 ~1170B/轮 → proj384 后 ~190-250B（≈维数比，符合理论）；wire 从 -42.5%（原域残差）
+逆转为 +25.1%，KC-1 三判定全 PASS。mock 验证另见
+test_projection_domain_residual_shrinks_bytes。
