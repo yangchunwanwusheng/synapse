@@ -15,7 +15,10 @@ docstring 明确 *"the thread running the function cannot be forcefully killed"*
 
 **非安全沙箱**（诚实边界）：子进程与宿主同 OS 用户，绝对路径文件系统与网络均可达；
 import 白名单是静态检查而非强制隔离。材料表述口径："进程级隔离执行器（超时可强杀 +
-POSIX 资源限制），非安全沙箱"。
+POSIX 资源限制，指直接 worker；非安全沙箱——同用户文件系统/网络未隔离）"。
+另两条通道边界（复审补）：子进程产物经 pickle 回传父进程反序列化——当前受限解释器内
+构造恶意对象不可达，但放宽 ``additional_authorized_imports`` 时须重评此通道；超时强杀
+的是**直接 worker 子进程**（白名单限制下无派生进程路径，进程树终止未单独验证）。
 """
 
 from __future__ import annotations
@@ -69,7 +72,12 @@ class SubprocessExecutor:
             )
 
     def _preexec(self):
-        """POSIX 资源限制；Windows 返回 None（subprocess 不接受可调用 preexec_fn）。"""
+        """POSIX 资源限制；Windows 返回 None（subprocess 不接受可调用 preexec_fn）。
+
+        注：preexec_fn 在多线程进程中 fork 属 CPython 文档警示场景——当前 synapse
+        调用链单线程无碍；未来并发 run 需换 posix_spawn 方案。FSIZE 上限当前为模块
+        常量（防日志/数据文件刷盘），memory/cpu 可经构造参数配置。
+        """
         if os.name != "posix":
             return None
         import resource
@@ -90,8 +98,9 @@ class SubprocessExecutor:
         payload = json.dumps(
             {
                 "code": code_action,
-                # state 含 smolagents PrintContainer 等非 JSON 类型 → pickle b64 通道
-                "state_b64": _pickle_b64({k: v for k, v in self.state.items() if k != "__name__"}) or "",
+                # state 含 smolagents PrintContainer 等非 JSON 类型 → pickle b64 通道；
+                # 逐 key 过滤：个别不可 pickle 的值只丢该键，不拖垮整个 state（复审 P1-2）
+                "state_b64": _pickle_state({k: v for k, v in self.state.items() if k != "__name__"}),
                 "additional_authorized_imports": self.additional_authorized_imports,
                 "max_print_outputs_length": self.max_print_outputs_length,
             }
@@ -119,24 +128,43 @@ class SubprocessExecutor:
             tail = (proc.stderr or "").strip()[-500:]
             raise InterpreterError(f"executor process failed (exit={proc.returncode}): {tail}")
         env = json.loads(proc.stdout.strip().splitlines()[-1])
-        self.state.update(_unpickle(env.get("state_b64") or ""))
+        # state 回传：解码失败=协议错误（显式失败，不静默丢 state）
+        st = _unpickle(env.get("state_b64") or "")
+        if st is _DECODE_FAILED:
+            raise InterpreterError("executor protocol error: state decode failed")
+        if isinstance(st, dict):
+            self.state.update(st)
         if not env.get("ok"):
             raise InterpreterError(env.get("error") or "executor failed without error message")
-        output = _unpickle(env.get("output_b64"))
+        if env.get("output_repr"):  # 非 final 中间结果不可 pickle → repr 降级（仅观察面，非业务承诺）
+            output = env.get("output_repr_text", "")
+        else:
+            output = _unpickle(env.get("output_b64"))
+            if env.get("output_b64") and output is _DECODE_FAILED:
+                raise InterpreterError("executor protocol error: output decode failed")
         return CodeOutput(output=output, logs=env.get("logs", ""), is_final_answer=env["is_final_answer"])
 
     def cleanup(self) -> None:  # 一次性子进程无持久资源（CodeAgent.close 会探测性调用）
         pass
 
 
-def _pickle_b64(obj) -> str | None:
-    try:
-        return base64.b64encode(pickle.dumps(obj)).decode("ascii")
-    except Exception:  # noqa: BLE001 — 父侧状态含不可 pickle 值时按 None 降级（子进程空状态起步）
+class _DecodeFailed:
+    """哨兵：与合法 None 区分传输层解码失败。"""
+
+
+_DECODE_FAILED = _DecodeFailed()
+
+
+def _pickle_state(state: dict) -> str:
+    """逐 key 过滤后 pickle（不可 pickle 的键丢弃），永不整体失败为 None。"""
+    safe = {}
+    for k, v in state.items():
         try:
-            return base64.b64encode(pickle.dumps(None)).decode("ascii")
-        except Exception:
-            return None
+            pickle.dumps(v)
+            safe[k] = v
+        except Exception:  # noqa: BLE001 — 单键不可序列化只丢该键（与子进程回传侧对称）
+            continue
+    return base64.b64encode(pickle.dumps(safe)).decode("ascii")
 
 
 def _unpickle(b64: str | None):
@@ -144,5 +172,5 @@ def _unpickle(b64: str | None):
         return None
     try:
         return pickle.loads(base64.b64decode(b64))
-    except Exception:  # noqa: BLE001 — 传输层损坏按执行失败定性，不炸父进程
-        return None
+    except Exception:  # noqa: BLE001 — 返回哨兵由调用方显式定性（协议错误不静默）
+        return _DECODE_FAILED

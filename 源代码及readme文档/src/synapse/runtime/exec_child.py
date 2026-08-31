@@ -21,6 +21,16 @@ import pickle
 import sys
 
 
+class SerializationError(Exception):
+    """final answer 对象不可 pickle——子进程通道无法回传（显式失败，不静默 repr 降级）。"""
+
+    def __init__(self, type_name: str):
+        super().__init__(
+            f"SerializationError: final answer object of type {type_name} is not picklable — "
+            "subprocess executor channel supports picklable results only (str/int/list/dict/...)"
+        )
+
+
 def _identity_final_answer(*args, **kwargs):  # noqa: ANN002, ANN003 — 与 smolagents Tool 同签名宽容度
     """final_answer 占位：LocalPythonExecutor 会把它包成 FinalAnswerException(value)。"""
     if len(args) == 1:
@@ -31,11 +41,8 @@ def _identity_final_answer(*args, **kwargs):  # noqa: ANN002, ANN003 — 与 smo
 def _pickle_b64(obj) -> str | None:
     try:
         return base64.b64encode(pickle.dumps(obj)).decode("ascii")
-    except Exception:  # 不可 pickle 的输出降级为 repr 字符串（诚实保住结果文本）
-        try:
-            return base64.b64encode(pickle.dumps(repr(obj))).decode("ascii")
-        except Exception:
-            return None
+    except Exception:
+        return None
 
 
 def main() -> None:
@@ -45,7 +52,9 @@ def main() -> None:
     state_in = {}
     if payload.get("state_b64"):
         try:
-            state_in = pickle.loads(base64.b64decode(payload["state_b64"]))
+            loaded = pickle.loads(base64.b64decode(payload["state_b64"]))
+            if isinstance(loaded, dict):  # 复审 P1-2：None/畸形载荷按空状态起步，不再炸 send_variables
+                state_in = loaded
         except Exception:  # noqa: BLE001 — 传输层损坏按空状态起步（子进程求值自身仍受控）
             state_in = {}
 
@@ -58,14 +67,27 @@ def main() -> None:
     executor.send_tools({"final_answer": _identity_final_answer})
 
     ok, output, logs, is_final, error = True, None, "", False, None
+    output_repr = False
+    output_repr_text = ""
     try:
         out = executor(payload["code"])
         output, logs, is_final = out.output, out.logs, out.is_final_answer
+        if ok and _pickle_b64(output) is None:
+            # 复审修正：不可 pickle 的结果不再静默 repr 降级——final answer 属业务承诺，
+            # 显式 SerializationError（子进程通道仅支持可 pickle 结果：str/int/list/dict 等）；
+            # 非 final 中间结果降级 repr 且打标（父进程区分观察文本与真实值）。
+            if is_final:
+                raise SerializationError(type(output).__name__)
+            output_repr, output_repr_text = True, repr(output)[:2000]
+    except SerializationError as e:
+        ok, error = False, str(e)
     except BaseException as e:  # noqa: BLE001 — 子进程内任何失败都封进信封交父进程定性
         ok, error = False, f"{type(e).__name__}: {e}"
         logs = str(executor.state.get("_print_outputs", ""))
+        output_repr = False
 
     state = {}
+    state_dropped = 0
     for k, v in executor.state.items():
         if k == "__name__":
             continue
@@ -73,7 +95,7 @@ def main() -> None:
             pickle.dumps(v)
             state[k] = v
         except Exception:
-            pass  # 工具对象/异常实例等不可序列化状态：跨步保持降级为丢弃（诚实边界）
+            state_dropped += 1  # 不可序列化状态键计数入信封（跨步保持降级为丢弃，透明化）
 
     sys.stdout.write(
         json.dumps(
@@ -81,8 +103,11 @@ def main() -> None:
                 "ok": ok,
                 "is_final_answer": bool(is_final),
                 "logs": logs,
-                "output_b64": _pickle_b64(output) if ok else None,
+                "output_b64": _pickle_b64(output) if ok and not output_repr else None,
+                "output_repr": output_repr,
+                "output_repr_text": output_repr_text,
                 "state_b64": _pickle_b64(state) or "",
+                "state_dropped": state_dropped,
                 "error": error,
             }
         )

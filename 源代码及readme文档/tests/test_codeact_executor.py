@@ -47,7 +47,8 @@ def test_subprocess_executor_state_persists_across_steps():
 def test_subprocess_executor_blocks_unauthorized_imports():
     ex = SubprocessExecutor(timeout_seconds=30)
     ex.send_tools(_fa())
-    with pytest.raises(Exception, match="(?i)not allowed|failed"):
+    # 匹配须钉住白名单拦截语义（复审 P2：过宽的 "failed" 会掩盖子进程任意崩溃）
+    with pytest.raises(Exception, match=r"(?i)not (?:allowed|authorized)|authorized import"):
         ex("import subprocess")
 
 
@@ -134,17 +135,63 @@ def test_build_team_wires_subprocess_executor():
     from synapse.runtime.team import build_team
 
     team = build_team(Config(codeact_executor="subprocess", codeact_timeout_s=30))
-    for ag in team.agents():
-        assert isinstance(ag.python_executor, SubprocessExecutor)
-        assert ag.python_executor.timeout_seconds == 30
+    execs = [ag.python_executor for ag in team.agents()]
+    for ex in execs:
+        assert isinstance(ex, SubprocessExecutor)
+        assert ex.timeout_seconds == 30
+    # 复审 P1-1：4 个 Agent 必须各持独立 executor 实例（共享会跨 Agent 串扰 state）
+    assert len({id(ex) for ex in execs}) == 4
     # 默认档保持 smolagents 进程内执行器（历史口径零回归）
     team_local = build_team(Config())
     assert not isinstance(team_local.agents()[0].python_executor, SubprocessExecutor)
 
 
+def test_subprocess_executor_state_isolated_between_instances():
+    """复审 P1-1 隔离语义：一个执行器实例写入的变量对另一实例不可见。"""
+    ex1 = SubprocessExecutor(timeout_seconds=30)
+    ex1.send_tools(_fa())
+    ex1("secret_marker = 'agent-1-only'")
+    ex2 = SubprocessExecutor(timeout_seconds=30)
+    ex2.send_tools(_fa())
+    with pytest.raises(Exception, match="(?i)not defined|failed"):
+        ex2("final_answer(secret_marker)")
+
+
 def test_config_enum_rejects_typo():
     with pytest.raises(ConfigError, match="codeact_executor"):
         Config(codeact_executor="subproces")  # 拼写错误构造即失败，不静默落 local
+
+
+@pytest.mark.parametrize("field", ["codeact_timeout_s", "codeact_memory_mb", "codeact_cpu_s"])
+def test_config_rejects_non_positive_resource_params(field):
+    with pytest.raises(ConfigError, match=field):
+        Config(**{field: 0})  # 复审：资源参数非正值会让超时形同虚设/rlimit 换算失真
+
+
+def test_subprocess_executor_state_per_key_pickle_filter():
+    """复审 P1-2：父侧 state 含个别不可 pickle 值时只丢该键，不拖垮整个 state。"""
+    ex = SubprocessExecutor(timeout_seconds=30)
+    ex.send_tools(_fa())
+    ex.send_variables({"evidence": "alpha beta", "cb": lambda: 1})  # lambda 不可 pickle
+    out = ex("n = len(evidence.split())\nfinal_answer(n)")
+    assert out.output == 2  # evidence（"alpha beta"）仍可见：逐 key 过滤，而非整体丢失
+
+
+def test_subprocess_executor_unpicklable_final_answer_fails_explicitly():
+    """复审：不可 pickle 的 final answer 显式 SerializationError，不静默 repr 降级。"""
+    ex = SubprocessExecutor(timeout_seconds=30)
+    ex.send_tools(_fa())
+    with pytest.raises(Exception, match="(?i)SerializationError.*not picklable"):
+        ex("class P:\n    pass\nfinal_answer(P())")
+
+
+def test_subprocess_executor_unpicklable_intermediate_output_repr_fallback():
+    """非 final 中间结果不可 pickle → repr 降级且打标（观察面，非业务承诺）。"""
+    ex = SubprocessExecutor(timeout_seconds=30)
+    ex.send_tools(_fa())
+    out = ex("class P:\n    pass\nx = P()\nlen(str(x))")
+    assert isinstance(out.output, (str, int))  # repr 文本或长度值，不炸、不静默改 final 语义
+    assert out.is_final_answer is False
 
 
 def test_codeagent_end_to_end_with_subprocess_executor():

@@ -86,6 +86,10 @@ class Config:
                     f"配置字段 {field_name}={v!r} 非法（应为 {'|'.join(allowed)}；"
                     "拼写错误不得静默落入默认档）"
                 )
+        # V3-08 复审：CodeAct 资源参数必须为正（0/负值会让超时形同虚设或 rlimit 换算失真）
+        for field_name in ("codeact_timeout_s", "codeact_memory_mb", "codeact_cpu_s"):
+            if getattr(self, field_name) <= 0:
+                raise ConfigError(f"配置字段 {field_name} 必须为正整数（当前 {getattr(self, field_name)!r}）")
 
     def api_key(self) -> str | None:
         return os.environ.get(self.api_key_env)

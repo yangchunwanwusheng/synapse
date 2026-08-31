@@ -38,13 +38,19 @@ def _cap(agent_id: str, role: str, actions: tuple[str, ...]) -> Capability:
 
 
 def _make_verify_check_fn(cfg=None):
-    """§2.2 能力运行时验证 check_fn：对 cap.probe 声明的 codeact_sandbox 做真实探针执行。
+    """§2.2 能力验证 check_fn：对 cap.probe 声明的 codeact_sandbox 做真实探针执行（握手期探测记录）。
 
     V3-08（Issue #148750）前为"声明即已验证"（直接返回声明集合）——彻查报告批评口径：
     能力发现应成为可验证承诺。现在首调即真跑一段最小 CodeAct（``final_answer(2 ** 10)``）
     并核对结果：local 档在进程内求值，subprocess 档拉起一次隔离子进程（与该档真实执行
-    路径同构）。探针失败 → 返回空集（该能力诚实不通过验证）。结果闭包记忆化，
-    每 CNR/TTL 周期只探测一次；探针异常不外泄（失败按未验证计）。
+    路径同构）。探针失败 → 返回空集（该能力诚实不通过验证）；探针异常不外泄（按未验证计）。
+
+    边界如实声明（复审修正）：
+    - 该探针只证明**最小 CodeAct 执行可用**，不验证超时强杀/RLIMIT/隔离属性，也不
+      gate 后续 execu.run()（verified 结果当前仅作为 CNR 握手的验证记录，不改变执行路由）；
+    - 记忆化生命周期=本闭包=本 run_task 的 Scheduler/CNR（synapse_mode 每任务重建），
+      即**每个任务的 hello 周期探测一次**（TTL 300s 在单任务内不会过期）；subprocess 档
+      每任务多一次子进程冷启动（实测约 1.6s，见 docs/工程化基线.md）。
     """
     memo: dict[str, set[str]] = {}
 
@@ -112,19 +118,27 @@ def build_team(cfg) -> Team:
 
     V3-08：codeact_executor="subprocess" 时注入进程级隔离执行器（超时可强杀 + POSIX
     资源限制）；默认 "local" 保持进程内受限解释器（历史口径，零回归）。
-    """
-    executor = None
-    if getattr(cfg, "codeact_executor", "local") == "subprocess":
-        from .subprocess_executor import SubprocessExecutor
 
-        executor = SubprocessExecutor(
-            timeout_seconds=cfg.codeact_timeout_s,
-            memory_limit_mb=cfg.codeact_memory_mb,
-            cpu_seconds=cfg.codeact_cpu_s,
-        )
+    复审 P1-1 修正：**每 Agent 独立 executor 实例**（与 local 档每 CodeAgent 各自
+    create_python_executor 的隔离语义对齐）——共享实例会让一个角色的 CodeAct 变量
+    残留进其他角色的 state（跨 Agent 串扰，已实测复现并补隔离测试）。
+    注意：注入自定义 executor 时 CodeAgent 的 additional_authorized_imports /
+    max_print_outputs_length 参数不被消费（smolagents 仅在自建路径读取）；当前
+    两档均取默认值（[]/None→50000），语义一致。
+    """
+    use_subprocess = getattr(cfg, "codeact_executor", "local") == "subprocess"
     agents: dict[str, CodeAgent] = {}
     caps: dict[str, Capability] = {}
     for role, agent_id, actions, desc in _ROLES:
+        executor = None
+        if use_subprocess:
+            from .subprocess_executor import SubprocessExecutor
+
+            executor = SubprocessExecutor(
+                timeout_seconds=cfg.codeact_timeout_s,
+                memory_limit_mb=cfg.codeact_memory_mb,
+                cpu_seconds=cfg.codeact_cpu_s,
+            )
         agent = CodeAgent(
             tools=[],
             model=make_model(cfg, role),
