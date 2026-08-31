@@ -41,6 +41,14 @@ def _io(*models) -> tuple[int, int]:
     return ti, to
 
 
+def _split_sentences(story: str) -> list[str]:
+    """故事切句（句末标点/换行分隔）——句级检索单元（V3-04 附带修复：真 top-k）。"""
+    import re
+
+    parts = re.split(r"(?<=[.!?])\s+|\n+", story.strip())
+    return [p.strip() for p in parts if p.strip()]
+
+
 def _cap(agent_id: str, role: str, actions: tuple[str, ...]) -> Capability:
     return Capability(agent_id, role, actions, ("text", "embedding"), "paratera")
 
@@ -111,14 +119,37 @@ def run_synapse(conv: Conversation, cfg) -> dict:
     sched = Scheduler([], cnr=cnr, metrics=m)
 
     # 故事一次性入共享记忆 + CAS（句柄寻址，跨轮复用同一份，不每轮新拷）。
-    story_u = store.write(
-        source_agent="story",
-        task_topic=conv.conv_id,
-        summary="story",
-        content=conv.story,
-        kind="evidence",
-        tags=("story",),
-    )
+    # V3-04 附带修复（彻查 R-P1-8）：qa_story_mode 选口径——
+    #   full（默认，历史口径）     ：整段故事一个单元，每轮 prompt 带全文；
+    #   sentences（真 top-k 路径） ：故事切句入记忆，每轮按 turn.q 句向量检索 qa_sentences_k 句，
+    #                                prompt 只带选中句（qa_sentences_k 自此真实生效）。
+    story_mode = getattr(cfg, "qa_story_mode", "full")
+    if story_mode not in ("full", "sentences"):
+        raise ValueError(f"qa_story_mode 非法: {story_mode!r}（应为 full|sentences）")
+    if story_mode == "sentences":
+        sent_units = [
+            store.write(
+                source_agent="story",
+                task_topic=conv.conv_id,
+                summary=f"story-sent-{i}",
+                content=sent,
+                kind="evidence",
+                tags=("story", "sent"),
+                task_id=conv.conv_id,
+            )
+            for i, sent in enumerate(_split_sentences(conv.story))
+        ]
+        story_ref = tuple(u.mem_id for u in sent_units[: cfg.qa_sentences_k])
+    else:
+        story_u = store.write(
+            source_agent="story",
+            task_topic=conv.conv_id,
+            summary="story",
+            content=conv.story,
+            kind="evidence",
+            tags=("story",),
+        )
+        story_ref = (story_u.mem_id,)
     cas.put(conv.story.encode("utf-8"))
 
     f1s: list[float] = []
@@ -135,14 +166,23 @@ def run_synapse(conv: Conversation, cfg) -> dict:
         recent_ids = {str(turn.idx - 1 - j) for j in range(win)}
         sem_hits = []
         if len(history) > win:
-            for u, s in retr.search(turn.q, k=sem + win):
+            for u, s in retr.search(turn.q, k=sem + win, consume_k=sem):
                 if u.kind == "conclusion" and u.task_id not in recent_ids and s > cfg.hit_threshold:
                     sem_hits.append(u)
                 if len(sem_hits) >= sem:
                     break
         m.record_query(bool(recent) or bool(sem_hits))  # 是否复用了历史记忆
-        # 非文本/结构化消息：传句柄(故事 + 选中历史)，不在 agent 间消息里重述全文（M2/M4）
-        handles = (story_u.mem_id,) + tuple(u.mem_id for u in sem_hits)
+        # 句级检索（sentences 模式）：按当前问题检索故事句 top-k（qa_sentences_k 真实生效）
+        sent_hits = []
+        if story_mode == "sentences":
+            for u, s in retr.search(
+                turn.q, tags=("story",), k=cfg.qa_sentences_k + len(sem_hits),
+                consume_k=cfg.qa_sentences_k,
+            ):
+                if "sent" in u.tags and len(sent_hits) < cfg.qa_sentences_k:
+                    sent_hits.append(u)
+        # 非文本/结构化消息：传句柄(故事句/整段 + 选中历史)，不在 agent 间消息里重述全文（M2/M4）
+        handles = (tuple(u.mem_id for u in sent_hits) or story_ref) + tuple(u.mem_id for u in sem_hits)
         sched.metrics.record_message(
             Message(
                 f"m{n_msg}",
@@ -156,10 +196,12 @@ def run_synapse(conv: Conversation, cfg) -> dict:
         )
         n_msg += 1
 
-        # answerer：完整故事(权威上下文) + 仅相关历史(近窗+语义) + 当前问题
+        # answerer：故事(整段 or 句级 top-k) + 仅相关历史(近窗+语义) + 当前问题
+        story_ctx = "\n".join(u.content for u in sent_hits) if story_mode == "sentences" else conv.story
         hist_lines = [f"Q: {q}\nA: {a}" for q, a in recent] + [u.content for u in sem_hits]
         ctx = (
-            f"Story:\n{conv.story}\n\nRelevant prior Q&A:\n"
+            (f"Story:\n{story_ctx}" if story_mode == "full" else f"Story excerpts:\n{story_ctx}")
+            + "\n\nRelevant prior Q&A:\n"
             + "\n".join(hist_lines)
             + f"\n\nQuestion: {turn.q}\nAnswer:"
         )

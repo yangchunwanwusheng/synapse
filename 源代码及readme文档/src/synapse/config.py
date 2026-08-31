@@ -7,6 +7,7 @@ from __future__ import annotations
 
 import os
 from dataclasses import dataclass, asdict
+from typing import ClassVar
 
 
 @dataclass(frozen=True)
@@ -19,6 +20,7 @@ class Config:
     n_facts: int = 40  # Retriever "长证据"事实条数（放大纯文本透传冗余；配置驱动）
 
     # ---- 检索 / 记忆 ----
+    retrieval_semantics: str = "v3-04"  # 检索语义版本（v3-04 起：链接扩展召回历史版本 + 复用计数=被消费前 k 个）；历史 run（pre-v3-04）不可与本版本横向比较（manifest 落档）
     retrieval_k: int = 5
     hit_threshold: float = 0.15  # 检索 top 分 > 阈值 记为记忆命中
     w_keyword: float = 0.3  # 混合检索权重
@@ -38,8 +40,16 @@ class Config:
         False  # B3-no-mem：每任务清空跨任务记忆 → 证残差率下降因果源于记忆（P0-1 假设3 归因 ablation）
     )
 
+    # ---- 真通路（V3-04，Issue #148746）----
+    residual_true_path: bool = False  # True=残差/VLC 真数据通路（L1+L2 两级校验、重建检索恢复消费、三档真实分叉、CNR 驱动）；False=旧旁路路径（回归防护，翻转默认值须独立提交+真实评测重跑）
+    base_policy: str = "oracle"  # V3-04 ToM 选基三档：oracle=发送方以Y择优(乐观) | query_top1=检索top-1(接收方可复现) | learned=topic原型(聚合学习式)；字节按档分列报告
+    residual_project_dim: int = 0  # >0 时残差/索引在 JL 随机投影域（确定性共享投影，残差分量数≈按维数比下降）；0=原域；效果需真实 API 验证
+
     # ---- 真实数据集 QA ----
-    qa_sentences_k: int = 4  # [CoQA] synapse 每轮检索的故事句子数（非文本选择）
+    qa_story_mode: str = "full"  # [CoQA] full=整段故事入prompt(历史口径) | sentences=句级检索top-k(qa_sentences_k 真实生效，V3-04 附带修复)
+    qa_sentences_k: int = (
+        4  # [CoQA] synapse 每轮检索的故事句子数（非文本选择；qa_story_mode=sentences 时生效）
+    )
     qa_history_k: int = 2  # [CoQA] synapse 每轮复用的相关历史 Q&A 数（紧凑记忆，非全量透传）
     qa_para_k: int = 3  # [HotpotQA] synapse 每题检索的相关段落数（10 段中只取 k，丢干扰段）
     qa_retrieval: str = "single"  # [HotpotQA] "single"=单跳问题检索 | "twohop"=两跳(用第一跳内容补检索桥接段)
@@ -52,6 +62,21 @@ class Config:
     api_key_env: str = "PARATERA_API_KEY"
     temperature: float = 0.0  # 复现性：真实 LLM 固定 0（实验协议 §LLM 条件块 / L5）
     embed_model: str = "GLM-Embedding-3"  # embedder=api 时 Paratera 句向量模型（无 GPU/torch）
+
+    # 枚举字段取值域（评审 P3-2：typo 静默落默认档与四档纪律相悖，构造即校验）
+    _ENUMS: ClassVar[dict[str, tuple[str, ...]]] = {
+        "base_policy": ("oracle", "query_top1", "learned"),
+        "qa_story_mode": ("full", "sentences"),
+    }
+
+    def __post_init__(self):
+        for field_name, allowed in self._ENUMS.items():
+            v = getattr(self, field_name)
+            if v not in allowed:
+                raise ConfigError(
+                    f"配置字段 {field_name}={v!r} 非法（应为 {'|'.join(allowed)}；"
+                    "拼写错误不得静默落入默认档）"
+                )
 
     def api_key(self) -> str | None:
         return os.environ.get(self.api_key_env)

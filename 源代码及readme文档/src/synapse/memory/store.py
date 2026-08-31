@@ -108,6 +108,9 @@ class MemoryStore:
         if not summary:
             date = datetime.now(timezone.utc).strftime("%Y-%m-%d")
             summary = f"prototype:{topic} | {n_evidence}evidence | 覆盖{n_tasks}任务 | 更新{date}"
+        # 原型为内容寻址幂等覆盖（同 topic 同 mem_id）——不存在可区分的"旧版本实体"，
+        # links 不得指向自身（彻查 self-link bug：prev.mem_id == mem_id 时形成自环死链）；
+        # 演化历史经 summary 的覆盖任务数/日期增量呈现（§3.4），而非链接。
         self._units[mem_id] = MemoryUnit(
             mem_id=mem_id,
             source_agent="consolidator",
@@ -119,10 +122,8 @@ class MemoryStore:
             tags=tuple(topic.split()),
             embedding=embedding,
             reuse_count=prev.reuse_count if prev else 0,
-            links=(prev.mem_id,) if prev else (),  # 沿演化链继承前版原型
+            links=(),
         )
-        if prev:
-            prev.superseded_by = mem_id  # 旧原型被新原型取代
         return self._units[mem_id]
 
     def get(self, mem_id: str) -> MemoryUnit | None:
