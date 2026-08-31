@@ -136,7 +136,10 @@ class SubprocessExecutor:
         if st is _DECODE_FAILED:
             raise InterpreterError("executor protocol error: state decode failed")
         if isinstance(st, dict):
-            self.state.update(st)
+            # 整体重建（非合并，评审 P3）：子进程 state 是权威快照——代码内 del 的键随重建消失
+            # （与 local 档 del 语义一致；原合并语义会残留父侧旧值并在下一步送回）；不可 pickle
+            # 被丢弃的键同样不再保留旧值（旧值本就随一次性子进程消亡）。
+            self.state = {"__name__": "__main__", **st}
         if not env.get("ok"):
             raise InterpreterError(env.get("error") or "executor failed without error message")
         if env.get("output_repr"):  # 非 final 中间结果不可 pickle → repr 降级（仅观察面，非业务承诺）

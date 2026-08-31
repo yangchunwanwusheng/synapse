@@ -157,6 +157,17 @@ def test_subprocess_executor_state_isolated_between_instances():
         ex2("final_answer(secret_marker)")
 
 
+def test_subprocess_executor_del_semantics_matches_local():
+    """评审 P3：代码内 del 的键跨步不可见（整体重建语义，与 local 档一致）。"""
+    ex = SubprocessExecutor(timeout_seconds=30)
+    ex.send_tools(_fa())
+    ex("x = 1")
+    out = ex("del x\nfinal_answer('deleted')")
+    assert out.output == "deleted"
+    with pytest.raises(Exception, match="(?i)not defined|failed"):
+        ex("final_answer(x)")  # 原合并语义会残留父侧旧值 1 并送回
+
+
 def test_config_enum_rejects_typo():
     with pytest.raises(ConfigError, match="codeact_executor"):
         Config(codeact_executor="subproces")  # 拼写错误构造即失败，不静默落 local

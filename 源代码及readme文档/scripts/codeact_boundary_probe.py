@@ -227,7 +227,9 @@ def build_report(results: dict) -> str:
         "|---|---|---|---|",
     ]
     for r in (results["t4_local"], results["t4_subprocess"]):
-        lines.append(f"| {r['mode']} | {r['platform']} | {r['outcome']} | {r.get('enforced', False)} |")
+        # N/A 时受限列同样写 N/A（评审 P3：False 易误读为"测了且不受限"）
+        enforced = "N/A" if r["outcome"] == "N/A" else r.get("enforced", False)
+        lines.append(f"| {r['mode']} | {r['platform']} | {r['outcome']} | {enforced} |")
     lines += [
         "",
         "## T5 崩溃遏制（子进程内除零 → 父进程存活）",

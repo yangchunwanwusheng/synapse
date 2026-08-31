@@ -1,6 +1,6 @@
 # CodeAct 执行边界实测报告（探针自动生成）
 
-- 生成时间：2026-08-31 21:04:06 +0800
+- 生成时间：2026-08-31 23:29:00 +0800
 - 主机：Windows 10 AMD64 / Python 3.11.14
 - smolagents：1.26.0
 - 探针脚本：`scripts/codeact_boundary_probe.py`（离线、确定性、有界时长）
@@ -10,7 +10,7 @@
 | 档位 | 结果 | 调用方 wall | 超时后仍被阻塞 | 线程泄漏 | 强杀后可恢复 |
 |---|---|---|---|---|---|
 | local | timeout | 6.0s | **是** | 否 | 是 |
-| subprocess | timeout | 2.01s | 否 | 否 | 是 |
+| subprocess | timeout | 2.03s | 否 | 否 | 是 |
 
 > local 档实测：`ExecutionTimeoutError` 在超时点抛出，但调用方被线程池 `shutdown(wait=True)` join 阻塞至代码自然结束（wall≈sleep 时长）——smolagents docstring 自述 *"the thread cannot be forcefully killed"* 的实测强化口径；`time.sleep(10**9)` 级代码将使 Agent 进程实质挂死。subprocess 档 wall≈timeout 即返回，父进程零残留线程且可继续服务。
 
@@ -37,8 +37,8 @@
 
 | 档位 | 平台 | 结果 | 是否受限 |
 |---|---|---|---|
-| local | Windows | N/A | False |
-| subprocess | Windows | N/A | False |
+| local | Windows | N/A | N/A |
+| subprocess | Windows | N/A | N/A |
 
 ## T5 崩溃遏制（子进程内除零 → 父进程存活）
 
