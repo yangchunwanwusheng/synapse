@@ -15,7 +15,12 @@ class Metrics:
     header_bytes: int = 0  # 结构化消息头字节
     nontext_transfers: int = 0  # 非文本状态传递次数
     nontext_bytes: int = 0  # 非文本载荷字节（残差/向量）
-    fallbacks: int = 0  # 校验回退次数
+    fallbacks: int = 0  # 校验回退次数（=fallback_steps，见下；旧路径=失败任务数口径）
+    # ---- V3-04 回退口径分列：events=首帧失败任务数（≤nontext_transfers）；steps=降档重发跳数 ----
+    # 旧路径（flag=False）一次失败只发一帧 text → events==steps==fallbacks，语义无漂移；
+    # 真通路逐跳回退（残差→embedding→text）一任务最多 2 跳 → 仅 steps 填充于每跳。
+    fallback_events: int = 0
+    fallback_steps: int = 0
     memory_queries: int = 0
     memory_hits: int = 0
     llm_tokens: int = 0  # 旧口径(=输出)；向后兼容合成管线
@@ -27,6 +32,18 @@ class Metrics:
     tier_residual: int = 0  # residual 档（预测基强，sim≥阈值）
     tier_embedding: int = 0  # embedding+text摘要档（预测基弱，0<sim<阈值）
     tier_text: int = 0  # text 档（无预测基/首轮冷启动/校验失败回退）
+    # ---- V3-04 真通路：诚实分档 + 恢复路径统计（cfg.residual_true_path=True 时填充）----
+    tier_residual_zero: int = 0  # residual_zero 档（冷启动零基，诚实标注，不冒充强基）
+    tier_residual_bytes: int = 0  # residual 档非文本字节构成
+    tier_residual_zero_bytes: int = 0  # residual_zero 档非文本字节构成（收缩序列起点）
+    tier_embedding_bytes: int = 0  # embedding 档非文本字节构成（全量向量 packet）
+    recovery_residual: int = 0  # 接收方经残差重构→检索恢复成功的次数
+    recovery_embedding: int = 0  # 接收方经全量向量→检索恢复（含回退跳 1）的次数
+    recovery_text: int = 0  # 接收方经全量文本回退（跳 2）恢复的次数
+    # ---- V3-04 ToM 选基三档字节分列（R-P0-6 口径修复：encoder-oracle 乐观载荷需另报）----
+    base_bytes_oracle: int = 0  # oracle 档（发送方以 Y 择优）非文本字节——乐观估算口径
+    base_bytes_query_top1: int = 0  # query-top1 档（接收方可复现）非文本字节——诚实口径
+    base_bytes_learned: int = 0  # learned 档（topic 原型）非文本字节——学习式口径
     frozen_snapshot_injections: int = 0  # §4.1 frozen-snapshot 记忆注入次数（保前缀缓存）
     result_spills: int = 0  # §2.3 result 序列化超阈值 → CAS 句柄 + 短摘要 的 spill 次数
     # ---- V3-02 双层计量：字节双口径 + embedding/CAS 分列（R-P0-7/11/12）----
@@ -60,14 +77,31 @@ class Metrics:
             self.nontext_bytes += nb
         if msg.meta.get("fallback"):
             self.fallbacks += 1
-        # §1.2 三档混合协议档位统计（发送方预判标注，meta["tier"] ∈ residual|embedding|text）
+            self.fallback_steps += 1  # 每条降档重发帧 = 1 跳（events 由会话层在首帧失败时计 1）
+        # §1.2 三档混合协议档位统计（发送方预判标注；V3-04 起真通路下 tier 增 residual_zero 档）
+        # 口径注意：tier_* 是**帧档位计数**（真通路含回退重发帧，一任务可多档）；旧路径
+        # tier_residual 含零基、真通路分列 residual_zero——两口径不可跨 run 混排，
+        # 以 manifest.config.residual_true_path 区分（审查 P2-5）。
         tier = msg.meta.get("tier")
         if tier == "residual":
             self.tier_residual += 1
+            self.tier_residual_bytes += nb
+        elif tier == "residual_zero":
+            self.tier_residual_zero += 1
+            self.tier_residual_zero_bytes += nb
         elif tier == "embedding":
             self.tier_embedding += 1
+            self.tier_embedding_bytes += nb
         elif tier == "text":
             self.tier_text += 1
+        # V3-04 ToM 选基三档字节分列（真通路帧带 meta.base_policy；oracle=乐观口径须与诚实口径并报）
+        bp = msg.meta.get("base_policy") if nb else None  # 仅非文本帧计入（text 帧 nb=0 不污染分列）
+        if bp == "oracle":
+            self.base_bytes_oracle += nb
+        elif bp == "query_top1":
+            self.base_bytes_query_top1 += nb
+        elif bp == "learned":
+            self.base_bytes_learned += nb
         if msg.meta.get("spilled"):  # §2.3 result spill 降级
             self.result_spills += 1
 
