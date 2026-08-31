@@ -56,9 +56,12 @@ def digest_packet(
     h.update(payload)
     h.update((base_handle or "").encode("utf-8"))
     h.update(int(generation).to_bytes(8, "big", signed=True))
-    h.update((session_id or "").encode("utf-8"))
-    h.update((domain or "").encode("utf-8"))
-    h.update((content_digest or "").encode("utf-8"))
+    # 字符串域统一长度前缀（评审 P3-1：裸拼接在相邻域间存在字节移位歧义，
+    # 如 base_handle="ab",session="c" vs "a","bc" 会得到同一哈希输入）
+    for s in (base_handle, session_id, domain, content_digest):
+        b = (s or "").encode("utf-8")
+        h.update(len(b).to_bytes(4, "big"))
+        h.update(b)
     return h.hexdigest()
 
 

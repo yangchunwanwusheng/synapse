@@ -83,19 +83,21 @@ CNR 门控：`negotiate()` 每任务真实调用，档位按 `_TIER_RANK`（与 
 - `abl_no_checksum` 在真通路下语义 = **无校验信道**（L1+L2+身份校验全关，接收方接受任意 top-1 恢复）——展示无校验的静默损坏风险，非单变量微消融；需单变量消融时应分别用 L1/L2 独立开关（后续 Issue）。
 - 翻转默认值 = 独立提交（配合真实 API 评测重跑与指标口径说明），不在本 PR。
 
-## 6. 能力边界声明（v2：三路审查后如实分档）
+## 6. 能力边界声明（v2：三路审查后如实分档；v3 数字随分支末态刷新）
 
-**已实现且已验证（mock 71 tests + 真实 API signal/hotpot 探针）**：
+**已实现且已验证（mock 80 tests + 真实 API signal/hotpot/CoQA 探针）**：
 - 同进程共享 CAS/VectorIndex 原型上，残差/全量向量重构结果真实驱动文本检索恢复并成为 summarizer 唯一输入；
-- L1 帧级完整性可由仅凭线缆帧字段的接收逻辑复算（to_wire 反序列化驱动，测试锁定）；
-- 基=mem_id 记忆边信息解析、content_digest 身份校验、逐跳回退链每跳消费帧、三档（+residual_zero）真实分叉、CNR negotiate 驱动、no-residual 真向量消融。
+- L1 帧级完整性可由仅凭线缆帧字段的接收逻辑复算（to_wire 反序列化驱动，测试锁定）；keyed MAC 128bit + 常量时间比较 + 重放窗口已实现（同会话内成立）；
+- 基=mem_id 记忆边信息解析、content_digest 身份校验、逐跳回退链每跳消费帧、四档（residual/residual_zero/embedding/text）真实分叉 + 三方率失真选档、CNR negotiate 驱动、no-residual 真向量消融、ToM 三档选基分列；
+- 真实 API wire 演进链（同任务族 signal，qwen3-235b + text-embedding-3-small 1536 维）：
+  原域残差 **-42.5%** → 三方率失真（短文本轮自动 text 档）**-21.4%** → 投影域 proj384 **+25.1%**（收缩 +64.3%/因果 0.27/5-5 残差恢复零回退）；CoQA 句级 top-k token 省 62.4% 且 F1 非劣（详见 §8）。
 
 **原型或代理验证（不得对外夸大）**：
-- CAS 与 VectorIndex 为 SynapseSession 内同进程对象；发送方同轮发布 `量化Y→text_handle` 恢复目录（"自我实现恢复"的代理实现）；
+- CAS 与 VectorIndex 为 SynapseSession 内同进程对象；发送方同轮发布 `量化Y→text_handle` 恢复目录（"自我实现恢复"的代理实现）；vec_index 线性扫描跨任务无界增长（V3-06 数据平面处理）；
 - 接收逻辑与发送方在同一函数调用序列内执行（结构上已隔离为 `_receive_frame(msg)`，但无独立进程/传输层）；
 - executor 链路的 evidence 注入仍为发送方域内直通（CodeAct 需精确输入；真通路约束的是 retriever→summarizer 流）。
 
-**规划中（V3-05/V3-06 及以后）**：SharedMemoryCAS、独立接收端进程、AF_UNIX receive loop 与数据 blob 同步、keyed MAC、replay window、faiss 索引、跨进程端到端字节/延迟。
+**规划中（V3-05/V3-06 及以后）**：SharedMemoryCAS、独立接收端进程、AF_UNIX receive loop 与数据 blob 同步、跨进程密钥协商分发、faiss 索引、跨进程端到端字节/延迟。
 
 **禁止的强表述**（在上述完成前）："跨进程真通路已实现"；"接收方仅靠自身记忆恢复"（现为共享 MemoryStore）；"完整端到端通信成本=residual bytes"（CAS/索引/记忆建立成本另计）。
 

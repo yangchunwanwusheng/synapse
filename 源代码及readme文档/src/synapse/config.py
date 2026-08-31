@@ -7,6 +7,7 @@ from __future__ import annotations
 
 import os
 from dataclasses import dataclass, asdict
+from typing import ClassVar
 
 
 @dataclass(frozen=True)
@@ -61,6 +62,21 @@ class Config:
     api_key_env: str = "PARATERA_API_KEY"
     temperature: float = 0.0  # 复现性：真实 LLM 固定 0（实验协议 §LLM 条件块 / L5）
     embed_model: str = "GLM-Embedding-3"  # embedder=api 时 Paratera 句向量模型（无 GPU/torch）
+
+    # 枚举字段取值域（评审 P3-2：typo 静默落默认档与四档纪律相悖，构造即校验）
+    _ENUMS: ClassVar[dict[str, tuple[str, ...]]] = {
+        "base_policy": ("oracle", "query_top1", "learned"),
+        "qa_story_mode": ("full", "sentences"),
+    }
+
+    def __post_init__(self):
+        for field_name, allowed in self._ENUMS.items():
+            v = getattr(self, field_name)
+            if v not in allowed:
+                raise ConfigError(
+                    f"配置字段 {field_name}={v!r} 非法（应为 {'|'.join(allowed)}；"
+                    "拼写错误不得静默落入默认档）"
+                )
 
     def api_key(self) -> str | None:
         return os.environ.get(self.api_key_env)

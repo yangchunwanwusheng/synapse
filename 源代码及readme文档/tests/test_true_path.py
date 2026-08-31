@@ -192,6 +192,19 @@ def test_legacy_checksum_unchanged():
     )
 
 
+def test_config_enum_validation():
+    # 评审 P3-2：枚举字段 typo 必须构造即失败（不得静默落默认档与四档纪律相悖）
+    import pytest
+
+    from synapse.config import Config, ConfigError
+
+    with pytest.raises(ConfigError):
+        Config(base_policy="query-top1")  # 连字符 typo
+    with pytest.raises(ConfigError):
+        Config(qa_story_mode="sentence")  # 单数 typo
+    Config(base_policy="query_top1", qa_story_mode="sentences")  # 合法取值不受影响
+
+
 def test_cosine_dim_mismatch_raises():
     # 附带修复：zip 静默截断会造出假高相似 → 维度不符必须显式失败
     import pytest
