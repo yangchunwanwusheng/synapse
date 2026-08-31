@@ -1,0 +1,43 @@
+{
+  "format": "synapse-archive-preflight-v1",
+  "roots": [
+    "runs",
+    "04-analysis\\aggregated",
+    "_state",
+    "01-idea",
+    "02-design"
+  ],
+  "max_bytes": 1048576,
+  "summary": {
+    "errors": 0,
+    "warnings": 5,
+    "files": 0
+  },
+  "findings": [
+    {
+      "kind": "missing-root",
+      "path": "01-idea",
+      "severity": "warning"
+    },
+    {
+      "kind": "missing-root",
+      "path": "02-design",
+      "severity": "warning"
+    },
+    {
+      "kind": "missing-root",
+      "path": "04-analysis\\aggregated",
+      "severity": "warning"
+    },
+    {
+      "kind": "missing-root",
+      "path": "_state",
+      "severity": "warning"
+    },
+    {
+      "kind": "missing-root",
+      "path": "runs",
+      "severity": "warning"
+    }
+  ]
+}

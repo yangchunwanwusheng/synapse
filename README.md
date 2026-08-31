@@ -24,6 +24,43 @@
 
 > 源码位于 [源代码及readme文档](源代码及readme文档)。下文的安装、运行和测试命令均请先进入该目录执行。
 
+## 开仓与证据导航
+
+本仓库将“项目主张、实现与证据”分开维护：主张台账定义可公开的措辞，源码和测试证明
+机制已实现，实验归档与聚合表用于复算数字。每一条完成态主张均应能沿不超过三跳找到
+对应证据；尚未完成 V3-03 重跑的最终数字不在本节回填。
+
+| 评审维度 | 当前入口 | 证据类型 |
+| --- | --- | --- |
+| 通信效率 | [`TOKEN-HOTPOT-71`](docs/claim-evidence.csv) | QA 管线、计量测试、待批准的 run 归档 |
+| 状态传递 | [`RESID-2787-960`](docs/claim-evidence.csv) | 残差编解码、真通路测试、设计说明 |
+| 记忆复用 | [`CAUSAL-976`](docs/claim-evidence.csv) | 记忆模块、连续任务测试、逐项结果 |
+| 系统完整性 | [`ARCH-FIVE-MODULE`](docs/claim-evidence.csv) | 五模块源码、离线 smoke、容器配置 |
+| 实验验证 | [`ARCHIVE-77`](docs/claim-evidence.csv) | 结果 Schema、manifest、统计与聚合产物 |
+
+三条可直接点验的溯源路径：
+
+1. **结构化通信与能力协商**：README 的机制说明 → [`ARCH-FIVE-MODULE`](docs/claim-evidence.csv) → [`messages.py`](源代码及readme文档/src/synapse/protocol/messages.py) 与 [`test_smoke.py`](源代码及readme文档/tests/test_smoke.py)。
+2. **非文本预测残差**：README 的状态传递说明 → [`RESID-2787-960`](docs/claim-evidence.csv) → [`residual.py`](源代码及readme文档/src/synapse/stateplane/residual.py) 与 [`test_true_path.py`](源代码及readme文档/tests/test_true_path.py)。
+3. **计量可复算性**：README 的实验口径说明 → [`ARCHIVE-77`](docs/claim-evidence.csv) → [`run-result.schema.md`](docs/schema/run-result.schema.md) 与 [`test_manifest.py`](源代码及readme文档/tests/test_manifest.py)。
+
+实验归档（`runs/`、`04-analysis/aggregated/`、`_state/`、`01-idea/`、`02-design/`）仅在
+团队逐目录确认后分批入库。入库前运行以下只读预检；它不会复制、删除、暂存或提交文件：
+
+```powershell
+python scripts/archive_preflight.py `
+  --root runs `
+  --root 04-analysis/aggregated `
+  --root _state `
+  --root 01-idea `
+  --root 02-design `
+  --json docs/repo-preflight-current.json
+```
+
+预检记录见 [`docs/repo-preflight-current.json`](docs/repo-preflight-current.json)。该记录只反映
+当前工作区是否存在候选目录及其准入风险；它不是实验结果，也不替代 V3-03 的数字回填与
+统计复算。
+
 ## 🧭 从“文本接力”到“状态协同”
 
 多智能体系统不应把人类语言当作唯一的通信总线。
