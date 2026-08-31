@@ -109,7 +109,9 @@ def main() -> None:
                 "state_b64": _pickle_b64(state) or "",
                 "state_dropped": state_dropped,
                 "error": error,
-            }
+            },
+            # ASCII 信封（与父侧对称）：stdout 编码随 locale，ensure_ascii=True 保证任何 locale 无损
+            ensure_ascii=True,
         )
         + "\n"
     )

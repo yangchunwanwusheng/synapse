@@ -60,7 +60,11 @@ def _make_verify_check_fn(cfg=None):
         if cfg is not None and getattr(cfg, "codeact_executor", "local") == "subprocess":
             from .subprocess_executor import SubprocessExecutor
 
-            ex = SubprocessExecutor(timeout_seconds=max(10, getattr(cfg, "codeact_timeout_s", 30)))
+            ex = SubprocessExecutor(
+                timeout_seconds=getattr(cfg, "codeact_timeout_s", 30),
+                memory_limit_mb=getattr(cfg, "codeact_memory_mb", 2048),
+                cpu_seconds=getattr(cfg, "codeact_cpu_s", 120),
+            )  # 复审修正：探针带 cfg 资源限制（与该档真实执行路径同构，而非默认 rlimit）
         else:
             ex = LocalPythonExecutor(additional_authorized_imports=[])
         ex.send_tools({"final_answer": lambda *a: a[0] if len(a) == 1 else (a or None)})

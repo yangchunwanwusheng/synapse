@@ -95,6 +95,8 @@ class SubprocessExecutor:
         return _apply
 
     def __call__(self, code_action: str) -> CodeOutput:
+        # 信封必须 ASCII（ensure_ascii=True）：子进程 stdin 编码随 locale（Windows GBK/POSIX C），
+        # 中文 code/state 全部经 unicode 转义传输，任何 locale 解码均无损（实测 GBK 下中文往返精确相等）
         payload = json.dumps(
             {
                 "code": code_action,
@@ -103,7 +105,8 @@ class SubprocessExecutor:
                 "state_b64": _pickle_state({k: v for k, v in self.state.items() if k != "__name__"}),
                 "additional_authorized_imports": self.additional_authorized_imports,
                 "max_print_outputs_length": self.max_print_outputs_length,
-            }
+            },
+            ensure_ascii=True,
         )
         with tempfile.TemporaryDirectory(prefix="synapse-exec-") as cwd:
             try:
