@@ -14,6 +14,7 @@
 """
 
 import json
+import hashlib
 import os
 import sys
 from types import SimpleNamespace
@@ -249,6 +250,34 @@ def test_write_run_schema_valid(tmp_path):
     )
     # 兼容层：旧读取方（plot_* 脚本）依赖的顶层 config/result 键仍在
     assert "config" in doc and "result" in doc
+
+
+def test_dataset_info_imports_provenance_sidecar(tmp_path):
+    data = tmp_path / "sample.json"
+    data.write_text("[]\n", encoding="utf-8")
+    (tmp_path / "sample.json.meta.json").write_text(
+        json.dumps(
+            {
+                "dataset": "example/qa",
+                "revision": "a" * 40,
+                "split": "validation",
+                "output_sha256": hashlib.sha256(data.read_bytes()).hexdigest(),
+            }
+        ),
+        encoding="utf-8",
+    )
+    info = dataset_info(str(data), 0)
+    assert info["dataset"] == "example/qa"
+    assert info["revision"] == "a" * 40
+    assert info["sha256"]
+    assert info["provenance_verified"] is True
+    assert "note" not in info
+    data.write_text('["changed"]\n', encoding="utf-8")
+    stale = dataset_info(str(data), 1)
+    assert stale["sha256"] == hashlib.sha256(data.read_bytes()).hexdigest()
+    assert stale["sha256"] != info["sha256"]
+    assert stale["provenance_verified"] is False
+    assert "sidecar stale" in stale["note"]
 
 
 def _mini_manifest(command: str = "x") -> dict:

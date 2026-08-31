@@ -18,6 +18,11 @@ class Turn:
     idx: int
     q: str
     gold: str
+    answer_aliases: tuple[str, ...] = ()
+
+    @property
+    def answers(self) -> tuple[str, ...]:
+        return tuple(dict.fromkeys((self.gold, *self.answer_aliases)))
 
 
 @dataclass
@@ -45,7 +50,7 @@ def load_conversations(
             conv_id=c["id"],
             source=c.get("source", ""),
             story=c["story"],
-            turns=[Turn(i, t["q"], t["a"]) for i, t in enumerate(c["turns"])],
+            turns=[Turn(i, t["q"], t["a"], tuple(t.get("answer_aliases", ()))) for i, t in enumerate(c["turns"])],
         )
         for c in raw
     ]
@@ -70,6 +75,12 @@ class HotpotItem:
     gold_titles: tuple[str, ...]
     level: str = ""
     qtype: str = ""
+    answer_aliases: tuple[str, ...] = ()
+    question_decomposition: tuple[dict, ...] = ()
+
+    @property
+    def answers(self) -> tuple[str, ...]:
+        return tuple(dict.fromkeys((self.answer, *self.answer_aliases)))
 
 
 def load_hotpot(
@@ -88,6 +99,8 @@ def load_hotpot(
             gold_titles=tuple(it.get("gold_titles", ())),
             level=it.get("level", ""),
             qtype=it.get("type", ""),
+            answer_aliases=tuple(it.get("answer_aliases", ())),
+            question_decomposition=tuple(it.get("question_decomposition", ())),
         )
         for it in raw
     ]

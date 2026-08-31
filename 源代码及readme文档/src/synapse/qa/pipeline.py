@@ -22,7 +22,7 @@ from ..runtime.model import make_model
 from ..stateplane.cas import CAS
 from ..stateplane.embedding import make_embedder
 from .dataset import Conversation, HotpotItem
-from .scoring import f1
+from .scoring import score
 
 ANSWER_SYS = (
     "You are a precise reading-comprehension assistant. Answer with the shortest exact phrase "
@@ -63,6 +63,7 @@ def run_text(conv: Conversation, cfg) -> dict:
     sched = Scheduler([], cnr=cnr, metrics=m)
     history: list[tuple[str, str]] = []
     f1s: list[float] = []
+    ems: list[float] = []
     preds: list[str] = []  # V3-02 逐题落档：预测文本（与 golds 同序，供对账与复算）
     t0 = time.perf_counter()
     cum: list[int] = []
@@ -76,7 +77,9 @@ def run_text(conv: Conversation, cfg) -> dict:
         ans = _gen(model, ANSWER_SYS, ctx)
         history.append((turn.q, ans))
         preds.append(ans)
-        f1s.append(f1(ans, turn.gold))
+        scored = score(ans, turn.answers)
+        f1s.append(scored["f1"])
+        ems.append(scored["em"])
         cum.append(sum(_io(model)))  # 累计 token 随轮次（基线应增长）
     m.latency_s = time.perf_counter() - t0
     m.llm_input_tokens, m.llm_output_tokens = _io(model)
@@ -84,9 +87,11 @@ def run_text(conv: Conversation, cfg) -> dict:
     return {
         "metrics": m,
         "f1_per_turn": f1s,
+        "em_per_turn": ems,
         "cum_tokens": cum,
         "preds": preds,
         "golds": [t.gold for t in conv.turns],
+        "all_golds": [list(t.answers) for t in conv.turns],
     }
 
 
@@ -148,6 +153,7 @@ def run_synapse(conv: Conversation, cfg) -> dict:
     cas.put(conv.story.encode("utf-8"))
 
     f1s: list[float] = []
+    ems: list[float] = []
     cum: list[int] = []
     preds: list[str] = []
     history: list[tuple[str, str]] = []
@@ -200,7 +206,9 @@ def run_synapse(conv: Conversation, cfg) -> dict:
             + f"\n\nQuestion: {turn.q}\nAnswer:"
         )
         ans = _gen(model_ans, ANSWER_SYS, ctx)
-        f1s.append(f1(ans, turn.gold))
+        scored = score(ans, turn.answers)
+        f1s.append(scored["f1"])
+        ems.append(scored["em"])
         preds.append(ans)
         history.append((turn.q, ans))
         store.write(
@@ -222,9 +230,11 @@ def run_synapse(conv: Conversation, cfg) -> dict:
     return {
         "metrics": m,
         "f1_per_turn": f1s,
+        "em_per_turn": ems,
         "cum_tokens": cum,
         "preds": preds,
         "golds": [t.gold for t in conv.turns],
+        "all_golds": [list(t.answers) for t in conv.turns],
     }
 
 
@@ -283,6 +293,7 @@ def run_text_hotpot(items: list[HotpotItem], cfg) -> dict:
     cnr.hello(_cap("answerer-1", "summarizer", ("SUMMARIZE",)))
     sched = Scheduler([], cnr=cnr, metrics=m)
     f1s: list[float] = []
+    ems: list[float] = []
     per_item: list[dict] = []  # V3-02 逐题落档（qid/预测/金标/F1）
     t0 = time.perf_counter()
     for it in items:
@@ -292,14 +303,19 @@ def run_text_hotpot(items: list[HotpotItem], cfg) -> dict:
             Message("m", "ctx-1", "answerer-1", ActionType.TELL.value, payload_kind="text", text=ctx)
         )
         ans = _gen(model, ANSWER_SYS, ctx)
-        f1s.append(f1(ans, it.answer))
-        per_item.append({"qid": it.qid, "question": it.q, "gold": it.answer, "pred": ans})
+        scored = score(ans, it.answers)
+        f1s.append(scored["f1"])
+        ems.append(scored["em"])
+        per_item.append(
+            {"qid": it.qid, "question": it.q, "gold": it.answer, "golds": list(it.answers), "pred": ans}
+        )
     m.latency_s = time.perf_counter() - t0
     m.llm_input_tokens, m.llm_output_tokens = _io(model)
     m.quality = round(sum(f1s) / len(f1s), 4) if f1s else 0.0
-    for rec, sc in zip(per_item, f1s):
-        rec["f1"] = sc
-    return {"metrics": m, "f1_per_turn": f1s, "per_item": per_item}
+    for rec, f1_score, em_score in zip(per_item, f1s, ems):
+        rec["f1"] = f1_score
+        rec["em"] = em_score
+    return {"metrics": m, "f1_per_turn": f1s, "em_per_turn": ems, "per_item": per_item}
 
 
 def run_synapse_hotpot(items: list[HotpotItem], cfg, embedder=None) -> dict:
@@ -319,6 +335,7 @@ def run_synapse_hotpot(items: list[HotpotItem], cfg, embedder=None) -> dict:
         cnr.hello(_cap(aid, role, acts))
     sched = Scheduler([], cnr=cnr, metrics=m)
     f1s: list[float] = []
+    ems: list[float] = []
     gold_recall: list[float] = []
     per_item: list[dict] = []  # V3-02 逐题落档（qid/预测/金标/F1/检索段）
     from ..eval.metrics import embedder_stats
@@ -365,13 +382,16 @@ def run_synapse_hotpot(items: list[HotpotItem], cfg, embedder=None) -> dict:
         paras = "\n\n".join(f"[{u.summary}] {u.content}" for u in hits)
         ctx = f"Context:\n{paras}\n\nQuestion: {it.q}\nAnswer:"
         ans = _gen(model, ANSWER_SYS, ctx)
-        f1s.append(f1(ans, it.answer))
+        scored = score(ans, it.answers)
+        f1s.append(scored["f1"])
+        ems.append(scored["em"])
         rec_hit = sum(1 for g in it.gold_titles if g in got) / len(it.gold_titles) if it.gold_titles else 0.0
         per_item.append(
             {
                 "qid": it.qid,
                 "question": it.q,
                 "gold": it.answer,
+                "golds": list(it.answers),
                 "pred": ans,
                 "retrieved_titles": sorted(got),
                 "gold_titles": list(it.gold_titles),
@@ -383,11 +403,13 @@ def run_synapse_hotpot(items: list[HotpotItem], cfg, embedder=None) -> dict:
     er, eh, et = embedder_stats(embedder)
     m.embed_requests, m.embed_cache_hits, m.embed_input_tokens = er - er0, eh - eh0, et - et0
     m.quality = round(sum(f1s) / len(f1s), 4) if f1s else 0.0
-    for rec, sc in zip(per_item, f1s):
-        rec["f1"] = sc
+    for rec, f1_score, em_score in zip(per_item, f1s, ems):
+        rec["f1"] = f1_score
+        rec["em"] = em_score
     return {
         "metrics": m,
         "f1_per_turn": f1s,
+        "em_per_turn": ems,
         "per_item": per_item,
         "gold_recall": round(sum(gold_recall) / len(gold_recall), 3) if gold_recall else 0.0,
     }

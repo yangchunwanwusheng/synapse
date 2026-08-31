@@ -9,28 +9,46 @@ MuSiQue（`dgslibisey/MuSiQue`）每题 20 段、仅 2 段金标（is_supporting
 from __future__ import annotations
 
 import json
-import os
 import sys
 import urllib.request
+from urllib.parse import urlencode
 
-BASE = (
-    "https://datasets-server.huggingface.co/rows?dataset=dgslibisey%2FMuSiQue&config=default&split=validation"
-)
+from dataset_provenance import write_dataset
+
+DATASET = "dgslibisey/MuSiQue"
+REVISION = "c8f4f8c9465fb69d31a8eae894c3fd509c4ca321"
+BASE = "https://datasets-server.huggingface.co/rows"
 
 
 def main() -> None:
     want = int(sys.argv[1]) if len(sys.argv) > 1 else 200
     items = []
+    filtered = {"not_answerable": 0, "paragraph_count_not_20": 0, "fewer_than_2_unique_gold_titles": 0}
     for off in range(0, 1200, 100):
-        with urllib.request.urlopen(f"{BASE}&offset={off}&length=100", timeout=60) as r:
+        query = urlencode(
+            {
+                "dataset": DATASET,
+                "config": "default",
+                "split": "validation",
+                "revision": REVISION,
+                "offset": off,
+                "length": 100,
+            }
+        )
+        with urllib.request.urlopen(f"{BASE}?{query}", timeout=60) as r:
             rows = json.load(r)["rows"]
         for x in rows:
             row = x["row"]
             if not row.get("answerable", True):
+                filtered["not_answerable"] += 1
                 continue
             ps = row["paragraphs"]
             gold = [p["title"] for p in ps if p.get("is_supporting")]
-            if len(ps) < 2 or len(gold) < 2:
+            if len(ps) != 20:
+                filtered["paragraph_count_not_20"] += 1
+                continue
+            if len(set(gold)) < 2:
+                filtered["fewer_than_2_unique_gold_titles"] += 1
                 continue
             paragraphs = [{"title": p["title"], "text": p["paragraph_text"].strip()} for p in ps]
             items.append(
@@ -38,6 +56,8 @@ def main() -> None:
                     "id": row["id"],
                     "question": row["question"],
                     "answer": row["answer"],
+                    "answer_aliases": row.get("answer_aliases", []),
+                    "question_decomposition": row.get("question_decomposition", []),
                     "type": "musique",
                     "level": "multihop",
                     "gold_titles": list(dict.fromkeys(gold)),
@@ -47,18 +67,17 @@ def main() -> None:
         if len(items) >= want:
             break
     items = items[:want]
-    os.makedirs("data", exist_ok=True)
-    json.dump(
+    metadata = write_dataset(
+        "data/musique_sample.json",
         items,
-        open(os.path.join("data", "musique_sample.json"), "w", encoding="utf-8"),
-        ensure_ascii=False,
-        indent=1,
+        {"dataset": DATASET, "revision": REVISION, "split": "validation", "filters": filtered},
     )
     avg_p = sum(len(it["paragraphs"]) for it in items) / max(1, len(items))
     avg_w = sum(len(p["text"].split()) for it in items for p in it["paragraphs"]) / max(1, len(items))
     print(
         f"saved {len(items)} items -> data/musique_sample.json (avg {avg_p:.0f} paras, {avg_w:.0f} ctx words/题)"
     )
+    print(f"revision={REVISION} sha256={metadata['output_sha256']} filtered={filtered}")
     for it in items[:3]:
         print(f"  {it['id'][:16]}: gold={it['gold_titles']}")
 

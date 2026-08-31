@@ -95,6 +95,21 @@ def collect_manifest(
 def dataset_info(path: str, n_items: int | None = None) -> dict:
     """数据集版本锚定：路径 + SHA256 + 条数（R-P0-9/P1-9 数据可溯源）。"""
     info = {"path": path, "sha256": _file_sha256(path), "n_items": n_items}
+    sidecar = f"{path}.meta.json"
+    try:
+        with open(sidecar, encoding="utf-8") as f:
+            provenance = json.load(f)
+        for key in ("dataset", "revision", "version", "split", "source_url", "source_sha256", "filters"):
+            if key in provenance:
+                info[key] = provenance[key]
+        info["provenance_path"] = sidecar
+        if provenance.get("output_sha256") and provenance["output_sha256"] != info["sha256"]:
+            info["note"] = "sidecar stale: output_sha256 differs from current file"
+            info["provenance_verified"] = False
+        else:
+            info["provenance_verified"] = bool(provenance.get("output_sha256"))
+    except (OSError, json.JSONDecodeError):
+        pass
     if info["sha256"] is None:
         info["note"] = "file unreadable at manifest time"
     return info
