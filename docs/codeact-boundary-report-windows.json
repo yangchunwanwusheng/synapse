@@ -1,0 +1,141 @@
+{
+  "generated_at": "2026-08-31T21:03:45+0800",
+  "env": {
+    "platform": "Windows-10-10.0.26200-SP0",
+    "python": "3.11.14",
+    "machine": "AMD64",
+    "smolagents_version": "1.26.0"
+  },
+  "t1": [
+    {
+      "mode": "local",
+      "timeout_s": 2,
+      "sleep_s": 6,
+      "outcome": "timeout",
+      "detail": "Code execution exceeded the maximum execution time of 2 seconds",
+      "caller_wall_s": 6.0,
+      "caller_blocked_beyond_timeout": true,
+      "threads_after": 1,
+      "threads_leaked": false,
+      "recovered_after_timeout": true
+    },
+    {
+      "mode": "subprocess",
+      "timeout_s": 2,
+      "sleep_s": 6,
+      "outcome": "timeout",
+      "detail": "Code execution exceeded the maximum execution time of 2 seconds (subprocess killed)",
+      "caller_wall_s": 2.01,
+      "caller_blocked_beyond_timeout": false,
+      "threads_after": 1,
+      "threads_leaked": false,
+      "recovered_after_timeout": true
+    }
+  ],
+  "t2_local": {
+    "mode": "local",
+    "results": {
+      "subprocess": {
+        "outcome": "blocked",
+        "allowed": false,
+        "detail": "Code execution failed at line 'import subprocess' due to: InterpreterError: Import of subprocess is "
+      },
+      "socket": {
+        "outcome": "blocked",
+        "allowed": false,
+        "detail": "Code execution failed at line 'import socket' due to: InterpreterError: Import of socket is not allo"
+      },
+      "os": {
+        "outcome": "blocked",
+        "allowed": false,
+        "detail": "Code execution failed at line 'import os' due to: InterpreterError: Import of os is not allowed. Aut"
+      },
+      "shutil": {
+        "outcome": "blocked",
+        "allowed": false,
+        "detail": "Code execution failed at line 'import shutil' due to: InterpreterError: Import of shutil is not allo"
+      },
+      "math": {
+        "outcome": "ok",
+        "allowed": true,
+        "detail": "'imported math'"
+      }
+    }
+  },
+  "t2_subprocess": {
+    "mode": "subprocess",
+    "results": {
+      "subprocess": {
+        "outcome": "blocked",
+        "allowed": false,
+        "detail": "InterpreterError: Code execution failed at line 'import subprocess' due to: InterpreterError: Import"
+      },
+      "socket": {
+        "outcome": "blocked",
+        "allowed": false,
+        "detail": "InterpreterError: Code execution failed at line 'import socket' due to: InterpreterError: Import of "
+      },
+      "os": {
+        "outcome": "blocked",
+        "allowed": false,
+        "detail": "InterpreterError: Code execution failed at line 'import os' due to: InterpreterError: Import of os i"
+      },
+      "shutil": {
+        "outcome": "blocked",
+        "allowed": false,
+        "detail": "InterpreterError: Code execution failed at line 'import shutil' due to: InterpreterError: Import of "
+      },
+      "math": {
+        "outcome": "ok",
+        "allowed": true,
+        "detail": "'imported math'"
+      }
+    }
+  },
+  "t3_local": {
+    "mode": "local",
+    "open_builtin": {
+      "outcome": "blocked",
+      "detail": "Code execution failed at line 'f = open('C:\\\\Users\\\\oobbee\\\\AppData\\\\Local\\\\Temp\\\\synapse-boundary-u"
+    },
+    "dunder_import": {
+      "outcome": "blocked",
+      "detail": "Code execution failed at line 'final_answer(__import__(\"os\").getcwd())' due to: InterpreterError: Fo"
+    },
+    "note": "解释器层静态防线（禁用 builtin + import 白名单）；非 OS 级文件系统隔离"
+  },
+  "t3_subprocess": {
+    "mode": "subprocess",
+    "open_builtin": {
+      "outcome": "blocked",
+      "detail": "InterpreterError: Code execution failed at line 'f = open('C:\\\\Users\\\\oobbee\\\\AppData\\\\Local\\\\Temp\\\\"
+    },
+    "dunder_import": {
+      "outcome": "blocked",
+      "detail": "InterpreterError: Code execution failed at line 'final_answer(__import__(\"os\").getcwd())' due to: In"
+    },
+    "note": "解释器层静态防线（禁用 builtin + import 白名单）；非 OS 级文件系统隔离"
+  },
+  "t4_local": {
+    "mode": "local",
+    "platform": "Windows",
+    "outcome": "N/A",
+    "detail": "Windows 无 resource 模块（RLIMIT 不可用，仅超时+强杀）"
+  },
+  "t4_subprocess": {
+    "mode": "subprocess",
+    "platform": "Windows",
+    "outcome": "N/A",
+    "detail": "Windows 无 resource 模块（RLIMIT 不可用，仅超时+强杀）"
+  },
+  "t5_local": {
+    "mode": "local",
+    "child_failure": "Code execution failed at line 'final_answer(1 / 0)' due to: ZeroDivisionError: division by zero",
+    "parent_survives": true
+  },
+  "t5_subprocess": {
+    "mode": "subprocess",
+    "child_failure": "InterpreterError: Code execution failed at line 'final_answer(1 / 0)' due to: ZeroDivisionError: div",
+    "parent_survives": true
+  }
+}

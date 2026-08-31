@@ -1,0 +1,32 @@
+name: synapse-ci
+description: SYNAPSE 本地门禁等价流水线（与 scripts/ci.sh 同源：锁定依赖同步 + Ruff + Pytest + 离线 smoke；Issue #148750）
+
+# GitLink DevOps 引擎（建木）流水线。触发：任意分支 push（PR 分支门禁由此覆盖）。
+# 依据：docs/工程化基线.md §GitLink 引擎门禁；节点语法见建木管道 DSL 文档。
+trigger:
+  type: webhook
+  param:
+    - name: branch
+      type: STRING
+      exp: $.body.json.ref
+    - name: git_url
+      type: STRING
+      exp: $.body.json.repository.git_http_url
+
+pipeline:
+  git_clone:
+    alias: 拉取仓库
+    type: git_clone:1.2.0
+    param:
+      remote_url: https://gitlink.org.cn/liuruifei/yzmxdzntxzddkxtxztcdygxjyjz.git
+      ref: ${trigger.branch}
+  ci:
+    alias: 本地门禁等价步骤
+    image: python:3.11-slim
+    script:
+      - cd ${git_clone.git_path}/源代码及readme文档
+      - python -m pip install --no-cache-dir uv
+      - uv sync --locked --extra dev --no-editable
+      - uv run --no-sync ruff check .
+      - uv run --no-sync pytest -q
+      - uv run --no-sync synapse smoke

@@ -79,8 +79,9 @@ class SynapseSession:
         # V3-02 cold/warm 分列：embedder 与 CAS 跨任务持久，取任务级增量
         er0, eh0, et0 = embedder_stats(self.embedder)
         cw0, cb0 = self.cas.writes, self.cas.write_bytes
-        # §2.2 CNR 握手带运行时能力探测（check_fn 门控）：Executor 声明 codeact_sandbox 时实测
-        sched = Scheduler(team.agents(), cnr=CNR(check_fn=_make_verify_check_fn()), metrics=m)
+        # §2.2 CNR 握手带运行时能力探测（check_fn 门控）：Executor 声明 codeact_sandbox 时
+        # 真实探针执行（V3-08：从"声明即已验证"改为实测 final_answer(2**10)）
+        sched = Scheduler(team.agents(), cnr=CNR(check_fn=_make_verify_check_fn(self.cfg)), metrics=m)
         planner = sched.agent("planner")
         retr = sched.agent("retriever")
         execu = sched.agent("executor")

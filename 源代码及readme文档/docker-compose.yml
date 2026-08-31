@@ -6,6 +6,9 @@ services:
   synapse:
     build: .
     image: synapse:latest
+    # V3-06 备置（Issue #148750）：Docker /dev/shm 默认 64MiB，SharedMemoryCAS 数据面需要更大
+    # 共享内存段（运行时参数，等价 docker run --shm-size=1g；裸 docker run 时须显式携带）
+    shm_size: "1gb"
     env_file:
       - path: .env          # 注入 PARATERA_API_KEY；缺省(离线 smoke)时不报错
         required: false
