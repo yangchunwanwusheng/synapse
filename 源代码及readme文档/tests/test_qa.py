@@ -16,7 +16,7 @@ from synapse.qa.pipeline import (  # noqa: E402
     run_text,
     run_text_hotpot,
 )
-from synapse.qa.scoring import exact_match, f1, score  # noqa: E402
+from synapse.qa.scoring import exact_match, f1, normalize, score  # noqa: E402
 from synapse.qa.stats import (  # noqa: E402
     alternating_order,
     bootstrap_ci,
@@ -38,6 +38,16 @@ def test_official_scoring_golden_cases_and_multiple_references():
     assert exact_match("The, Eiffel Tower!", "eiffel tower") == 1.0
     assert f1("Denver Broncos", "Broncos") == 2 / 3
     assert score("NYC", ["New York City", "NYC"]) == {"em": 1.0, "f1": 1.0}
+
+
+def test_official_normalization_punctuation_before_articles():
+    # 官方脚本的 remove_articles(remove_punc(lower(s))) 从内向外执行。
+    # https://nlp.stanford.edu/data/coqa/evaluate-v1.0.py
+    # https://github.com/hotpotqa/hotpot/blob/master/hotpot_evaluate_v1.py
+    for raw, expected in (("a-team", "ateam"), ("the.best", "thebest"), ("th-e", "")):
+        assert normalize(raw) == expected
+    assert exact_match("a-team", "team") == 0.0
+    assert f1("the.best", "best") == 0.0
 
 
 def test_coqa_dataset_loads():

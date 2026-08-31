@@ -52,7 +52,11 @@ def cluster_bootstrap_ci(
 
 
 def variance_components(clusters: list[list[float]]) -> dict[str, float]:
-    """分列题间方差与题内（运行间）方差。"""
+    """分列描述性总体方差（pvariance，分母 N），不是无偏方差分量估计。
+
+    between_item 为题均值的总体方差；within_item 为有重复观测的题内总体
+    方差的等权均值。仅诊断噪声来源，不用于显著性/非劣推断。
+    """
     if not clusters or any(not cluster for cluster in clusters):
         return {"between_item": 0.0, "within_item": 0.0}
     item_means = [statistics.fmean(cluster) for cluster in clusters]

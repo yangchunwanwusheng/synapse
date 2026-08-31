@@ -103,6 +103,11 @@ def dataset_info(path: str, n_items: int | None = None) -> dict:
             if key in provenance:
                 info[key] = provenance[key]
         info["provenance_path"] = sidecar
+        if provenance.get("output_sha256") and provenance["output_sha256"] != info["sha256"]:
+            info["note"] = "sidecar stale: output_sha256 differs from current file"
+            info["provenance_verified"] = False
+        else:
+            info["provenance_verified"] = bool(provenance.get("output_sha256"))
     except (OSError, json.JSONDecodeError):
         pass
     if info["sha256"] is None:

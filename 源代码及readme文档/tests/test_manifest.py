@@ -14,6 +14,7 @@
 """
 
 import json
+import hashlib
 import os
 import sys
 from types import SimpleNamespace
@@ -260,7 +261,7 @@ def test_dataset_info_imports_provenance_sidecar(tmp_path):
                 "dataset": "example/qa",
                 "revision": "a" * 40,
                 "split": "validation",
-                "output_sha256": "ignored-in-favor-of-recomputed-file-hash",
+                "output_sha256": hashlib.sha256(data.read_bytes()).hexdigest(),
             }
         ),
         encoding="utf-8",
@@ -269,6 +270,14 @@ def test_dataset_info_imports_provenance_sidecar(tmp_path):
     assert info["dataset"] == "example/qa"
     assert info["revision"] == "a" * 40
     assert info["sha256"]
+    assert info["provenance_verified"] is True
+    assert "note" not in info
+    data.write_text('["changed"]\n', encoding="utf-8")
+    stale = dataset_info(str(data), 1)
+    assert stale["sha256"] == hashlib.sha256(data.read_bytes()).hexdigest()
+    assert stale["sha256"] != info["sha256"]
+    assert stale["provenance_verified"] is False
+    assert "sidecar stale" in stale["note"]
 
 
 def _mini_manifest(command: str = "x") -> dict:

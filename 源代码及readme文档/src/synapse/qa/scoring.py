@@ -12,6 +12,11 @@ from collections.abc import Iterable
 
 
 def normalize(s: str) -> str:
+    """先去标点再去冠词；嵌套调用从内向外执行，不能按书写顺序理解。
+
+    对照 CoQA evaluate-v1.0.py 与 HotpotQA hotpot_evaluate_v1.py：
+    white_space_fix(remove_articles(remove_punc(lower(s))))。
+    """
     s = (s or "").lower()
     s = "".join(ch for ch in s if ch not in string.punctuation)
     s = re.sub(r"\b(a|an|the)\b", " ", s)
@@ -34,7 +39,7 @@ def f1(pred: str, gold: str) -> float:
 
 
 def exact_match(pred: str, gold: str) -> float:
-    """官方阅读理解口径：标准化后的字符串完全一致。"""
+    """标准化后的字符串完全一致。"""
     return float(normalize(pred) == normalize(gold))
 
 

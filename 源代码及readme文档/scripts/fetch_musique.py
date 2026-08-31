@@ -23,7 +23,7 @@ BASE = "https://datasets-server.huggingface.co/rows"
 def main() -> None:
     want = int(sys.argv[1]) if len(sys.argv) > 1 else 200
     items = []
-    filtered = {"paragraph_count_not_20": 0, "fewer_than_2_unique_gold_titles": 0}
+    filtered = {"not_answerable": 0, "paragraph_count_not_20": 0, "fewer_than_2_unique_gold_titles": 0}
     for off in range(0, 1200, 100):
         query = urlencode(
             {
@@ -40,6 +40,7 @@ def main() -> None:
         for x in rows:
             row = x["row"]
             if not row.get("answerable", True):
+                filtered["not_answerable"] += 1
                 continue
             ps = row["paragraphs"]
             gold = [p["title"] for p in ps if p.get("is_supporting")]
