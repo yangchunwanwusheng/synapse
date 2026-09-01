@@ -57,9 +57,18 @@ def test_subprocess_executor_timeout_kills_without_thread_leak():
     ex = SubprocessExecutor(timeout_seconds=3)
     ex.send_tools(_fa())
     t0 = time.monotonic()
+    # 载荷必须是无界高开销循环：纯空转 `while True: pass` 约 2.5s 即耗尽 smolagents
+    # 解释器的 1M 次迭代守卫（消息不含本断言的任一关键词），快机器上守卫先于 3s
+    # wall-clock 超时触发——被测的强杀路径根本不执行且断言失败（本机实测竞态临界
+    # 3/3 翻车）。每迭代分配 10MB 使 1M 次迭代需 ~10^3s 量级，任何平台均远超 3s，
+    # 父进程强杀成为唯一出口；载荷增量峰值内存 20MB（重绑即释放，无累积），
+    # 远低于默认 RLIMIT_AS 2048MB
     with pytest.raises(Exception, match="(?i)maximum execution time|subprocess killed"):
-        ex("while True:\n    pass")
+        ex("while True:\n    s = 'x' * 10000000")
     wall = time.monotonic() - t0
+    assert wall >= ex.timeout_seconds, (
+        f"强杀不得早于 wall-clock 超时点发生，实际 {wall:.2f}s < {ex.timeout_seconds}s"
+    )
     assert wall < 15, f"超时强杀应在 wall-clock 附近完成，实际 {wall:.1f}s"
     # 进程级强杀：父进程不得因之残留工作线程（对照 local 档线程池超时线程不可强杀）
     assert threading.active_count() <= threads_before + 1
