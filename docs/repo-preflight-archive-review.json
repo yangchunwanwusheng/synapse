@@ -1,0 +1,39 @@
+{
+  "format": "synapse-archive-preflight-v1",
+  "source": "reviewer real-archive run; archive not imported into this repository",
+  "roots": [
+    "runs",
+    "04-analysis/aggregated",
+    "_state",
+    "01-idea",
+    "02-design"
+  ],
+  "max_bytes": 1048576,
+  "summary": {
+    "errors": 2,
+    "warnings": 1,
+    "files": 138
+  },
+  "findings": [
+    {
+      "kind": "absolute-path",
+      "path": "runs/docker_build2.log",
+      "line": 49,
+      "severity": "error",
+      "disposition": "manual-review: container-internal /home/synapse path; semantically harmless"
+    },
+    {
+      "kind": "absolute-path",
+      "path": "runs/docker_build3.log",
+      "line": 180,
+      "severity": "error",
+      "disposition": "manual-review: container-internal /home/synapse path; semantically harmless"
+    },
+    {
+      "kind": "large-file",
+      "path": "04-analysis/claims_visual/manual.pdf",
+      "severity": "warning",
+      "disposition": "pending: confirm whether to keep or move outside the archive"
+    }
+  ]
+}

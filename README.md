@@ -34,7 +34,7 @@
 | --- | --- | --- |
 | 通信效率 | [`TOKEN-HOTPOT-71`](docs/claim-evidence.csv) | QA 管线、计量测试、待批准的 run 归档 |
 | 状态传递 | [`RESID-2787-960`](docs/claim-evidence.csv) | 残差编解码、真通路测试、设计说明 |
-| 记忆复用 | [`CAUSAL-976`](docs/claim-evidence.csv) | 记忆模块、连续任务测试、逐项结果 |
+| 记忆复用 | [`COQA-HIT-921`](docs/claim-evidence.csv) | 记忆模块、连续任务测试、逐项结果 |
 | 系统完整性 | [`ARCH-FIVE-MODULE`](docs/claim-evidence.csv) | 五模块源码、离线 smoke、容器配置 |
 | 实验验证 | [`ARCHIVE-77`](docs/claim-evidence.csv) | 结果 Schema、manifest、统计与聚合产物 |
 
@@ -57,9 +57,22 @@ python scripts/archive_preflight.py `
   --json docs/repo-preflight-current.json
 ```
 
-预检记录见 [`docs/repo-preflight-current.json`](docs/repo-preflight-current.json)。该记录只反映
-当前工作区是否存在候选目录及其准入风险；它不是实验结果，也不替代 V3-03 的数字回填与
-统计复算。
+Linux / openEuler（sh）:
+
+```bash
+python3 scripts/archive_preflight.py \
+  --root runs \
+  --root 04-analysis/aggregated \
+  --root _state \
+  --root 01-idea \
+  --root 02-design \
+  --json docs/repo-preflight-current.json
+```
+
+预检记录见 [`docs/repo-preflight-current.json`](docs/repo-preflight-current.json)；评审环境真实归档
+的一轮复核见 [`docs/repo-preflight-archive-review.json`](docs/repo-preflight-archive-review.json)。
+前者只反映当前工作区是否存在候选目录，后者记录外部归档的人工裁决状态；两者都不是实验结果，
+也不替代 V3-03 的数字回填与统计复算。
 
 ## 🧭 从“文本接力”到“状态协同”
 

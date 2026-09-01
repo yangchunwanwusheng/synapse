@@ -13,7 +13,6 @@ import re
 from pathlib import Path
 from typing import Any
 
-
 SECRET_PATTERNS = (
     re.compile(r"\bsk-[A-Za-z0-9_-]{16,}\b"),
     re.compile(r"-----BEGIN (?:[A-Z ]+ )?PRIVATE KEY-----"),
@@ -23,7 +22,8 @@ SECRET_PATTERNS = (
     ),
 )
 ABSOLUTE_PATH = re.compile(
-    r"(?:\b[A-Za-z]:[\\/]|\\\\[^\\/\s]+[\\/][^\\/\s]+|(?<![A-Za-z0-9_.-])/(?:home|Users|tmp|var|opt|mnt)/)"
+    r"(?:\b[A-Za-z]:[\\/]|\\\\[^\\/\s]+[\\/][^\\/\s]+|"
+    r"(?<![A-Za-z0-9_.-])/(?:home|Users|tmp|var|opt|mnt|root|data)/)"
 )
 
 
@@ -62,9 +62,9 @@ def _scan_text(path: Path, relative_path: str) -> list[dict[str, Any]]:
 def scan_root(root: Path, max_bytes: int) -> tuple[list[dict[str, Any]], int]:
     """Return findings and inspected-file count without changing *root*."""
     if not root.exists():
-        return [_finding("missing-root", str(root), "warning")], 0
+        return [_finding("missing-root", root.as_posix(), "warning")], 0
     if not root.is_dir():
-        return [_finding("invalid-root", str(root), "error")], 0
+        return [_finding("invalid-root", root.as_posix(), "error")], 0
 
     findings: list[dict[str, Any]] = []
     files = 0
@@ -94,7 +94,7 @@ def build_report(roots: list[Path], max_bytes: int) -> dict[str, Any]:
     warnings = sum(item["severity"] == "warning" for item in findings)
     return {
         "format": "synapse-archive-preflight-v1",
-        "roots": [str(root) for root in roots],
+        "roots": [root.as_posix() for root in roots],
         "max_bytes": max_bytes,
         "summary": {"errors": errors, "warnings": warnings, "files": files},
         "findings": findings,

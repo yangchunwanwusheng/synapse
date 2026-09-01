@@ -13,6 +13,10 @@
 **/.mypy_cache/
 **/.venv/
 
+# Codex / Claude local state
+.zcode/
+.claude/
+
 # 操作系统与编辑器临时文件
 .DS_Store
 Thumbs.db

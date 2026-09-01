@@ -2,7 +2,7 @@
   "format": "synapse-archive-preflight-v1",
   "roots": [
     "runs",
-    "04-analysis\\aggregated",
+    "04-analysis/aggregated",
     "_state",
     "01-idea",
     "02-design"
@@ -26,7 +26,7 @@
     },
     {
       "kind": "missing-root",
-      "path": "04-analysis\\aggregated",
+      "path": "04-analysis/aggregated",
       "severity": "warning"
     },
     {
