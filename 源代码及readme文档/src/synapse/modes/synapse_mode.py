@@ -317,9 +317,10 @@ class SynapseSession:
         tier = intended if self._TIER_RANK[intended] <= cap else ("embedding" if cap >= 1 else "text")
 
         def _checksum(payload: bytes, base_ref: str, pk: str) -> str:
-            # 认证域含 pk:dim:project_dim（解释 payload 的关键元数据须防篡改；GPT 终审）；
+            # 认证域含 pk:source_dim:dim:project_dim（解释 payload 的关键元数据须防篡改；GPT 终审；
+            # #149012：source_dim 显式上线缆后，接收方可凭帧独立复算激活投影档，不再依赖配置原值）；
             # tag 128bit（认证场景不用 64bit）
-            domain = f"{pk}:{len(Y_q)}:{proj.proj_dim if proj else 0}"
+            domain = f"{pk}:{len(Y)}:{len(Y_q)}:{proj.proj_dim if proj else 0}"
             return digest_packet(
                 payload,
                 base_ref,
@@ -346,6 +347,7 @@ class SynapseSession:
                     "tier": tier_,
                     "generation": gen,
                     "content_digest": content_digest,
+                    "source_dim": len(Y),  # 原始 embedding 维度（投影输入域；#149012）
                     "dim": len(Y_q),
                     "base_policy": self.tom.policy,  # V3-04 ToM 选基三档（字节按档分列报告）
                     "project_dim": proj.proj_dim if proj else 0,  # 投影域残差（0=原域）
@@ -368,7 +370,8 @@ class SynapseSession:
                     "generation": gen,
                     "content_digest": content_digest,
                     "base_policy": self.tom.policy,
-                    "dim": len(Y_q),  # 认证域对称（接收方按 pk:dim:project_dim 构造）
+                    "source_dim": len(Y),  # 认证域对称（pk:source_dim:dim:project_dim）
+                    "dim": len(Y_q),
                     "project_dim": proj.proj_dim if proj else 0,
                 },
             )
@@ -442,7 +445,8 @@ class SynapseSession:
                         "tier": "text",
                         "generation": gen,
                         "content_digest": content_digest,
-                        "dim": len(Y_q),  # 认证域对称（接收方按 pk:dim:project_dim 构造）
+                        "source_dim": len(Y),  # 认证域对称（pk:source_dim:dim:project_dim）
+                        "dim": len(Y_q),
                         "project_dim": proj.proj_dim if proj else 0,
                     },
                 )
@@ -484,9 +488,12 @@ class SynapseSession:
             if msg.text is None:
                 return None, None
             tb = msg.text.encode("utf-8", errors="strict")
-            # text 帧 L1（keyed MAC，128bit）：domain 与发送方对称（pk:dim:project_dim）
+            # text 帧 L1（keyed MAC，128bit）：domain 与发送方对称（pk:source_dim:dim:project_dim）
             dim_meta = int(meta.get("dim", 0) or 0)
-            domain = f"text:{dim_meta}:{int(meta.get('project_dim', 0) or 0)}"
+            domain = (
+                f"text:{int(meta.get('source_dim', 0) or 0)}:{dim_meta}:"
+                f"{int(meta.get('project_dim', 0) or 0)}"
+            )
             if strict and not verify_packet(
                 tb,
                 "",
@@ -511,13 +518,23 @@ class SynapseSession:
             payload = self.cas.get(payload_handle)
             if payload is None:
                 return None, None
-            # 投影域一致性（GPT 终审：全非文本帧校验，不限于带基 residual）：
-            # 帧声明 project_dim 须与本会话激活投影一致；dim/project_dim 与 pk 同入 MAC 认证域
-            dim = int(meta.get("dim", 0))
-            pd_meta = int(meta.get("project_dim", 0) or 0)
-            if pd_meta != getattr(self.cfg, "residual_project_dim", 0):
+            # 投影域一致性（GPT 终审：全非文本帧校验，不限于带基 residual；#149012 修订）：
+            # 接收方凭帧声明 source_dim 独立复算激活投影档，须与帧声明 project_dim 一致——
+            # 不再与 cfg.residual_project_dim 原值比较（64 维 mock 携带 384 目标工作点时
+            # 发送方钳制声明 0，原值比较会误拒全部合法帧）；编码域 dim 须与 source_dim/
+            # project_dim 自洽（pd>0 → dim==pd；pd==0 → dim==source_dim）；
+            # source_dim/dim/project_dim 与 pk 同入 MAC 认证域
+            try:
+                src_meta = int(meta.get("source_dim", 0))
+                dim = int(meta.get("dim", 0))
+                pd_meta = int(meta.get("project_dim", 0) or 0)
+            except (TypeError, ValueError):
                 return None, None
-            domain = f"{msg.payload_kind}:{dim}:{pd_meta}"
+            if src_meta <= 0 or pd_meta != self._effective_project_dim(src_meta):
+                return None, None
+            if dim != (pd_meta if pd_meta > 0 else src_meta):
+                return None, None
+            domain = f"{msg.payload_kind}:{src_meta}:{dim}:{pd_meta}"
             if strict and not verify_packet(
                 payload,
                 base_ref,
@@ -574,13 +591,22 @@ class SynapseSession:
         m.recovery_embedding += 1
         return text, "embedding"
 
-    def _projection_for(self, dim: int):
-        """按配置惰性构建共享 JL 投影器（residual_project_dim=0 或 ≥dim 时返回 None=原域）。"""
-        pd = getattr(self.cfg, "residual_project_dim", 0)
-        if pd <= 0 or pd >= dim:
+    def _effective_project_dim(self, source_dim: int) -> int:
+        """配置投影维的实际激活档：仅当 0 < cfg.residual_project_dim < source_dim 时激活（投影须降维）。
+
+        发送方（len(Y)）、帧声明（source_dim）与接收方复算共用同一判定——64 维 mock 携带
+        384 目标工作点时自动回原域（project_dim=0），1536 维真实评测下 384 生效（#149012）。
+        """
+        pd = int(getattr(self.cfg, "residual_project_dim", 0) or 0)
+        return pd if 0 < pd < source_dim else 0
+
+    def _projection_for(self, source_dim: int):
+        """按配置惰性构建共享 JL 投影器（未激活返回 None=原域；激活判定见 _effective_project_dim）。"""
+        pd = self._effective_project_dim(source_dim)
+        if pd <= 0:
             return None
-        if self._proj is None or self._proj.dim != dim or self._proj.proj_dim != pd:
+        if self._proj is None or self._proj.dim != source_dim or self._proj.proj_dim != pd:
             from ..stateplane.projection import Projection
 
-            self._proj = Projection(dim, pd)
+            self._proj = Projection(source_dim, pd)
         return self._proj

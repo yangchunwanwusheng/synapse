@@ -652,11 +652,11 @@ def test_duplicate_frame_delivery_rejected():
     cd = digest_bytes(text.encode("utf-8"))
     from synapse.stateplane.checksum import digest_packet
 
-    ck = digest_packet(text.encode("utf-8"), "", 1, session.session_id, "text:64:0",
+    ck = digest_packet(text.encode("utf-8"), "", 1, session.session_id, "text:64:64:0",
                        cd, size=16, key=session._mac_key)
     msg = Message("dup-1", "r", "s", ActionType.TELL.value, payload_kind="text", text=text,
-                  checksum=ck, meta={"generation": 1, "content_digest": cd, "dim": 64,
-                                     "project_dim": 0})
+                  checksum=ck, meta={"generation": 1, "content_digest": cd, "source_dim": 64,
+                                     "dim": 64, "project_dim": 0})
     m = Metrics()
     first = session._receive_frame(msg, m)
     assert first == (text, "text"), "首投应成功"
@@ -697,3 +697,87 @@ def test_coqa_sentence_topk_takes_effect():
         f"句级 top-k 应省输入 token（{m_sent.llm_input_tokens} vs {m_full.llm_input_tokens}）"
     )
     assert len(r_sent["preds"]) == len(conv.turns)
+
+
+# ---------- #149012 C1：投影协议 source_dim 显式化 + 接收方一致性校验 ----------
+
+
+def _capture_first_frame(cfg):
+    """跑一次冷启动真通路会话，经 spy 捕获首帧（未走线缆前的原始帧）。"""
+    session = SynapseSession(cfg)
+    captured = {}
+    orig = session._receive_frame
+
+    def spy(frame, m):
+        captured.setdefault("frame", frame)
+        return orig(frame, m)
+
+    session._receive_frame = spy
+    res = session.run_task(T.g1_family(1)[0])
+    return session, captured["frame"], res
+
+
+def _tamper_variants(frame):
+    """对帧做线缆 roundtrip 后，分别篡改 source_dim/project_dim/dim 各生成一帧（新 msg_id 绕重放窗口）。"""
+    for field_, delta in (("source_dim", 1), ("project_dim", 1), ("dim", 1)):
+        meta = dict(frame.meta)
+        meta[field_] = meta[field_] + delta
+        yield field_, dataclasses.replace(_wire_roundtrip(frame), msg_id=f"t-bad-{field_}", meta=meta)
+
+
+def test_projection_clamps_when_cfg_ge_source_dim():
+    # 64 维 mock 携带 384 目标工作点 → 投影钳制回原域，残差帧照常消费（修复前接收方按
+    # cfg 原值比较 project_dim，会把钳制声明 0 的合法帧全部误拒）
+    cfg = Config(residual_true_path=True, residual_project_dim=384)  # embed_dim 默认 64
+    session, frame, res = _capture_first_frame(cfg)
+    m = res["metrics"]
+    assert frame.meta["source_dim"] == 64 and frame.meta["project_dim"] == 0
+    assert m.tier_residual_zero == 1 and m.recovery_residual == 1 and m.tier_text == 0
+    assert res["final_recovery_ok"], "钳制回原域后首帧应直接恢复，不走回退"
+
+
+def test_projection_active_1536_to_384_unit_and_honest_text_tier():
+    # 1536 维真实评测工作点：投影器按 source_dim 复算激活（1536→384）。率失真选档在 mock
+    # 短文本下诚实落 text 档（1536 维残差比短文本贵——真实向量+长 evidence 下才体现 proj384
+    # 收益，见 X6 矩阵 A 锚定），故此处单元级断言投影激活 + e2e 断言 text 路径无损
+    cfg = Config(residual_true_path=True, embed_dim=1536, residual_project_dim=384)
+    s = SynapseSession(cfg)
+    proj = s._projection_for(1536)
+    assert proj is not None and proj.dim == 1536 and proj.proj_dim == 384
+    assert s._effective_project_dim(1536) == 384 and s._effective_project_dim(64) == 0
+    m = s.run_task(T.g1_family(1)[0])["metrics"]
+    assert m.tier_text == 1 and m.recovery_text == 1, "短文本下率失真应诚实选 text 档且恢复成功"
+
+
+def test_projection_boundary_equal_dim_stays_original():
+    # source_dim == cfg 投影维（384/384）不激活（投影须严格降维），回原域且恢复成功
+    cfg = Config(residual_true_path=True, embed_dim=384, residual_project_dim=384)
+    session, frame, _res = _capture_first_frame(cfg)
+    assert frame.meta["source_dim"] == 384 and frame.meta["project_dim"] == 0
+
+
+def test_frame_dimension_meta_tamper_rejected_original_domain():
+    # 原域帧：source_dim/project_dim/dim 任一篡改 → MAC 域不一致或维度自洽校验拒绝
+    cfg = Config(residual_true_path=True)
+    session, frame, _res = _capture_first_frame(cfg)
+    from synapse.eval.metrics import Metrics  # noqa: E402
+
+    m = Metrics(mode="synapse")
+    ok = dataclasses.replace(_wire_roundtrip(frame), msg_id="t-ok")
+    assert session._receive_frame(ok, m)[0] is not None, "未篡改帧应正常恢复"
+    for field_, bad in _tamper_variants(frame):
+        assert session._receive_frame(bad, m) == (None, None), f"篡改 {field_} 必须被拒"
+
+
+def test_frame_dimension_meta_tamper_rejected_projection_domain():
+    # 投影域帧（64→16）：同上，且 source_dim 篡改后激活档复算仍一致（16<65），由 MAC 域拦截
+    cfg = Config(residual_true_path=True, residual_project_dim=16)
+    session, frame, _res = _capture_first_frame(cfg)
+    from synapse.eval.metrics import Metrics  # noqa: E402
+
+    m = Metrics(mode="synapse")
+    assert frame.meta["source_dim"] == 64 and frame.meta["dim"] == 16 and frame.meta["project_dim"] == 16
+    ok = dataclasses.replace(_wire_roundtrip(frame), msg_id="t-ok")
+    assert session._receive_frame(ok, m)[0] is not None
+    for field_, bad in _tamper_variants(frame):
+        assert session._receive_frame(bad, m) == (None, None), f"篡改 {field_} 必须被拒"
