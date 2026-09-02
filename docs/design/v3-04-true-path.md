@@ -3,7 +3,7 @@
 > 状态：**冻结**（2026-08-28，Issue 要求"8-28 前冻结，评审后开工"）；同日经三路独立审查
 > （GPT-5.6 / code-reviewer / strong-model-adviser）+ 真实 API signal 复验后修订为 v2
 > 依据：`docs/决赛前源码彻查报告-20260827.md` R-P0-1/2/3/4；`docs/决赛T45总执行方案-v3.md` N1/N2
-> 实现门控：`cfg.residual_true_path`（默认 **False** = 旧旁路路径原样保留，回归防护；本 Issue 后续真实评测重跑时翻转）
+> 实现门控：`cfg.residual_true_path`（**#149012 已翻默认 True** = 残差/VLC 真通路；False 保留为旧旁路对照/回归路径。真实 API 下新默认组合的最小复验锚定 X6 矩阵 A residual 行——本文件撰写时点默认仍为 False，翻转记录见 Issue #149012 与 tests/test_true_path.py）
 
 ## 0. 问题重述（现状为何是"旁路"）
 
@@ -78,7 +78,7 @@ CNR 门控：`negotiate()` 每任务真实调用，档位按 `_TIER_RANK`（与 
 
 ## 5. 兼容与回归防护
 
-- `cfg.residual_true_path = False`（默认）：完整保留旧路径（旁路+改账消融+标签三档），既有测试与历史口径零影响。
+- `cfg.residual_true_path = False`：完整保留旧路径（旁路+改账消融+标签三档），既有测试与历史口径零影响（#149012 后为非默认对照路径；跨 run 对比仍以 manifest.config 分层，见 §6）。
 - `ResidualCodec.decode(pkt, B_hat)` 旧接口保留；`encode()` 的 `pkt.checksum` **保持旧口径** digest_ints（跨 run 对账字段零变化）；新路径 L1 在帧层单独计算。
 - `abl_no_checksum` 在真通路下语义 = **无校验信道**（L1+L2+身份校验全关，接收方接受任意 top-1 恢复）——展示无校验的静默损坏风险，非单变量微消融；需单变量消融时应分别用 L1/L2 独立开关（后续 Issue）。
 - 翻转默认值 = 独立提交（配合真实 API 评测重跑与指标口径说明），不在本 PR。
@@ -113,7 +113,9 @@ CNR 门控：`negotiate()` 每任务真实调用，档位按 `_TIER_RANK`（与 
 - **复用计数语义**：仅被消费的 top-1 计 `reuse_count`（top-k 全计为乐观口径）；扩展召回不计。
 - **CoQA 真句级 top-k**（`cfg.qa_story_mode: full|sentences`）：sentences 模式故事切句入记忆、每轮按问题检索 top-`qa_sentences_k` 句（参数自此真实生效，mock 测试锁 token 下降）；full 保留历史口径。
 
-## 8. 创新增强：JL 投影域残差（`cfg.residual_project_dim`，默认 0=关）
+## 8. 创新增强：JL 投影域残差（`cfg.residual_project_dim`，#149012 后默认 384=目标工作点）
+
+> 激活判定：仅当 0 < 配置值 < source_dim 时实际激活（投影须严格降维）；64 维 mock 携带 384 自动回原域，1536 维真实句向量下 384 生效。激活判定收发双方同源（`_effective_project_dim`），帧显式携带 `source_dim` 供接收方独立复算（#149012 协议修订）。
 
 问题：高维稠密句向量（text-embedding-3-small 1536 维）能量均匀，原域稀疏残差达标分量数 O(dim)，
 短文本场景残差大于全文（wire 负收益的物理根因）。

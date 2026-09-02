@@ -40,10 +40,10 @@ class Config:
         False  # B3-no-mem：每任务清空跨任务记忆 → 证残差率下降因果源于记忆（P0-1 假设3 归因 ablation）
     )
 
-    # ---- 真通路（V3-04，Issue #148746）----
-    residual_true_path: bool = False  # True=残差/VLC 真数据通路（L1+L2 两级校验、重建检索恢复消费、三档真实分叉、CNR 驱动）；False=旧旁路路径（回归防护，翻转默认值须独立提交+真实评测重跑）
-    base_policy: str = "oracle"  # V3-04 ToM 选基三档：oracle=发送方以Y择优(乐观) | query_top1=检索top-1(接收方可复现) | learned=topic原型(聚合学习式)；字节按档分列报告
-    residual_project_dim: int = 0  # >0 时残差/索引在 JL 随机投影域（确定性共享投影，残差分量数≈按维数比下降）；0=原域；效果需真实 API 验证
+    # ---- 真通路（V3-04，Issue #148746；默认翻转 #149012，独立提交）----
+    residual_true_path: bool = True  # True=残差/VLC 真数据通路（L1+L2 两级校验、重建检索恢复消费、三档真实分叉、CNR 驱动）；False=旧旁路路径（对照/回归用，消融与 A/B 仍可达）。默认翻真通路的依据与边界：proj384 真实收益见 #148746（runs/ 与 04-analysis 聚合溯源）；真实 API 下新默认组合的最小复验锚定 X6 矩阵 A residual 行（docs/决赛夺冠冲击总计划-v4-对话制.md §矩阵 A），离线机制级验证见 tests/test_true_path.py
+    base_policy: str = "query_top1"  # V3-04 ToM 选基三档：oracle=发送方以Y择优(乐观) | query_top1=检索序下首个内容记忆单元(接收方可复现，默认) | learned=topic原型(聚合学习式)；字节按档分列报告
+    residual_project_dim: int = 384  # 目标投影工作点：仅当 0 < 本值 < source_dim 时激活 JL 投影域（确定性共享投影，须严格降维）；64 维 mock 下自动回原域，1536 维真实句向量下 384 生效（收益溯源 #148746）；激活判定收发双方同源（synapse_mode._effective_project_dim），帧携带 source_dim 供接收方独立复算
 
     # ---- 真实数据集 QA ----
     qa_story_mode: str = "full"  # [CoQA] full=整段故事入prompt(历史口径) | sentences=句级检索top-k(qa_sentences_k 真实生效，V3-04 附带修复)

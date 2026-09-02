@@ -149,10 +149,12 @@ def test_three_tier_protocol_stats():
     session = SynapseSession(Config())
     res = session.run_task(T.g1_family(1)[0])
     m = res["metrics"]
-    total_tiers = m.tier_residual + m.tier_embedding + m.tier_text
+    # 真通路默认后（#149012）冷启动诚实分列为 residual_zero 档，统计式含全部非文本/文本档
+    total_tiers = m.tier_residual_zero + m.tier_residual + m.tier_embedding + m.tier_text
     assert total_tiers > 0, "三档协议档位统计应 > 0"
-    # 冷启动首轮应走 residual（零基）档，不应是 text 档（保住收缩叙事）
+    # 冷启动首轮应走 residual（真通路下为零基档），不应是 text 档（保住收缩叙事）
     assert m.tier_text == 0, "无校验失败时首轮不应触发 text 档"
+    assert m.tier_residual_zero == 1, "真通路冷启动首轮应诚实走零基残差档"
 
 
 def test_memory_supersede_chain():
