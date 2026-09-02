@@ -13,6 +13,12 @@ w_keyword: 0.3
 w_tag: 0.2
 w_semantic: 0.5
 
+# 真通路（与 src/synapse/config.py 默认对齐；#149012）
+residual_true_path: true   # 残差/VLC 真数据通路；false=旧旁路路径（对照/回归用）
+base_policy: query_top1    # oracle=乐观 | query_top1=接收方可复现(默认) | learned=原型
+residual_project_dim: 384  # 目标投影工作点：仅 source_dim > 384 时实际激活（严格降维）；
+                           # 本文件 hash 64 维下自动回原域（激活判定见 _effective_project_dim）
+
 # 运行
 rounds: 10
 seeds: [0, 1, 2]
@@ -20,7 +26,7 @@ seeds: [0, 1, 2]
 # 后端（默认全离线 mock；真实路径 = Paratera 算力平台，见 README）
 llm_backend: mock          # mock | paratera
 embedder: hash             # hash | api
-model: Qwen3-30B-A3B-Instruct-2507
+model: Qwen3-235B-A22B-Instruct-2507   # 与 config.py 默认对齐（#149012）
 api_base: https://llmapi.paratera.com/v1
 api_key_env: PARATERA_API_KEY
 temperature: 0.0           # 复现性：真实 LLM 固定 0
