@@ -4,8 +4,10 @@ V3-04 选基三档（cfg.base_policy，字节按档分列报告——彻查 R-P0
 - oracle（旧默认，乐观口径）：发送方以 cos(candidate, Y) 择优——目标感知 codebook 选择，
   发送方知道 Y 才能选出，残差字节是"encoder-oracle 估算载荷"；
 - query_top1（接收方可复现）：基 = query 检索序下首个内容记忆单元（kind=evidence）——
-  接收方凭同一 query 可独立复现，无 Y 泄漏，是诚实口径的残差上界；派生单元
-  （conclusion/experience）不作基（#149012：弱相关派生基使残差比零基更贵且无复现语义）；
+  候选身份只由检索序与 kind 决定，不以 Y 在候选间择优（诚实口径）；派生单元
+  （conclusion/experience）不作基（#149012：弱相关派生基使残差比零基更贵且无复现语义）。
+  边界（复核记录）："是否启用基"仍由发送方率失真判据（sim=cos(B,Y)>0 才启用）决定，
+  该门控只收紧不放松——cos≤0 时零基不劣，不构成残差字节乐观偏差；如需彻底去门控另立 Issue；
 - learned（学习式）：基 = topic 巩固原型（Consolidator 从历史 evidence 聚合的质心，
   kind=experience）——记忆随任务累积逼近任务分布，非参数学习；无原型时退化为 query_top1。
 """
@@ -44,8 +46,8 @@ class ToMPredictor:
                     sim = cosine(unit.embedding, target) if target is not None else 0.0
                     return unit.embedding, unit.mem_id, sim
         if self.policy in ("query_top1", "learned"):
-            # query_top1（或 learned 无原型退化）：检索序下首个**内容记忆（kind=evidence）**单元，
-            # 不偷看 Y（sim 仅报告不参与选择）。#149012：conclusion/experience 等派生单元不作为
+            # query_top1（或 learned 无原型退化）：检索序下首个**内容记忆（kind=evidence）**单元；
+            # 候选身份不以 Y 择优（sim 不参与候选间选择；启用门控见类 docstring 边界注记）。#149012：conclusion/experience 等派生单元不作为
             # 预测基——基须是接收方共享记忆中可复现的内容单元（与 learned 的 experience 资格
             # 过滤同构）；无内容单元时诚实退化为发全量（None），不拿弱相关派生基凑数
             for unit, score in results:

@@ -9,3 +9,8 @@ api_key_env: VECTORENGINE_API_KEY
 model: qwen3-235b-a22b-instruct-2507   # MoE 22B 激活 + Instruct（非 thinking），CodeAct 友好
 embed_model: text-embedding-3-small    # dim=1536，触发残差编码双字节索引路径（覆盖骨架 64 维）
 temperature: 0.0                # 复现性：固定 0
+
+# 真通路三字段显式冻结（#149012 后与代码默认一致；历史数字复跑须回退对应代码 SHA 并以 manifest.config 分层）
+residual_true_path: true        # 残差/VLC 真数据通路
+base_policy: query_top1         # 诚实口径选基（检索序首个内容记忆单元）
+residual_project_dim: 384       # 1536 维句向量下降维投影目标工作点

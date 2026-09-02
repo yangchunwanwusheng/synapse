@@ -17,7 +17,7 @@ WORKDIR /app
 # 依赖清单先入层，利用构建缓存
 COPY pyproject.toml uv.lock README.md ./
 COPY src ./src
-# 核心(smolagents) + api(openai，真实 Paratera 路径)；不装 embed/vector(torch/faiss 重)，默认 hash 嵌入
+# 核心(smolagents) + api(openai，真实路径)；不装 vector(torch/faiss 重)，默认 hash 嵌入（embed extra 已删 #149012）
 RUN uv sync --frozen --no-dev --extra api --no-editable
 
 COPY configs ./configs

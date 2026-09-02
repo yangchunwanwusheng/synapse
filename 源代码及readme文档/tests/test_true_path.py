@@ -550,9 +550,11 @@ def test_base_policy_three_tiers_reported_separately():
         )
         bytes_by_policy[policy] = got
         assert got > 0, f"{policy} 档字节应分列计入（R-P0-6 三档另报）"
-    # oracle 以 Y 择优 → 残差最稀疏；query_top1（非目标感知）字节 ≥ oracle（诚实口径上界）
+    # oracle 以 Y 择优 → 残差通常最稀疏；query_top1（非目标感知）字节 ≥ oracle（方向性检查）。
+    # #149012 复核收窄：分列字节是观察值——mock 下三档可恰好相等（选择机制命中同一单元），
+    # 诚实性差异在候选机制（不以 Y 择优/接收方可复现），不必然体现在 mock 字节差上
     assert bytes_by_policy["oracle"] <= bytes_by_policy["query_top1"], (
-        "oracle 为乐观下界，query_top1 为诚实口径（应不小于）"
+        "oracle 为乐观口径观察值，query_top1 不应更小（同记忆快照下）"
     )
     # 平面级：query_top1 忽略 target 的择优语义
     emb = HE(Config().embed_dim)
@@ -802,6 +804,28 @@ def test_query_top1_eligibility_filters_derived_units():
     assert b == ev.embedding and sim > 0.9
     only_derived = tom.best_base([(concl, 0.9)], y)
     assert only_derived == (None, None, 0.0), "全派生候选应诚实退化为发全量"
+    learned = ToMPredictor(None, emb, Config(base_policy="learned"))
+    assert learned.best_base([(concl, 0.9)], y) == (None, None, 0.0), (
+        "learned 无原型退化路径同样受 evidence 资格过滤（复核 P2-2 锁定）"
+    )
+
+
+def test_query_top1_candidate_identity_independent_of_target():
+    # #149012 复核记录：候选身份不以 Y 择优（mem_id 不随 Y 改变）；但"是否启用基"由发送方
+    # 率失真判据 sim=cos(B,Y)>0 决定（synapse_mode has_base，1-bit 门控）——该门控只收紧不
+    # 放松（cos<=0 时零基不劣），不构成残差字节乐观偏差；彻底去门控属协议语义变更，另立 Issue
+    from synapse.memory.tom import ToMPredictor
+    from synapse.memory.store import MemoryUnit
+    from synapse.stateplane.embedding import HashEmbedder as HE
+
+    emb = HE(Config().embed_dim)
+    tom = ToMPredictor(None, emb, Config(base_policy="query_top1"))
+    u = MemoryUnit("e1", "r", "t", "topic", "s", "evidence", "content",
+                   embedding=emb.encode("alpha beta"))
+    b_rel, mid_rel, sim_rel = tom.best_base([(u, 0.9)], emb.encode("alpha beta"))
+    b_irr, mid_irr, sim_irr = tom.best_base([(u, 0.9)], emb.encode("totally different words"))
+    assert mid_rel == mid_irr == "e1", "候选身份不随 Y 改变"
+    assert sim_rel > sim_irr >= 0, "sim 仅随 Y 报告；启用门控在 synapse_mode 层（sim>0）"
 
 
 def test_query_top1_contraction_trajectory():

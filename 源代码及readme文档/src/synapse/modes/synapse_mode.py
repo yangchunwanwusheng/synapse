@@ -318,7 +318,7 @@ class SynapseSession:
 
         def _checksum(payload: bytes, base_ref: str, pk: str) -> str:
             # 认证域含 pk:source_dim:dim:project_dim（解释 payload 的关键元数据须防篡改；GPT 终审；
-            # #149012：source_dim 显式上线缆后，接收方可凭帧独立复算激活投影档，不再依赖配置原值）；
+            # #149012：source_dim 显式上线缆后，接收方凭帧复算激活投影档，不再与 cfg 原值直接比较）；
             # tag 128bit（认证场景不用 64bit）
             domain = f"{pk}:{len(Y)}:{len(Y_q)}:{proj.proj_dim if proj else 0}"
             return digest_packet(
@@ -489,11 +489,14 @@ class SynapseSession:
                 return None, None
             tb = msg.text.encode("utf-8", errors="strict")
             # text 帧 L1（keyed MAC，128bit）：domain 与发送方对称（pk:source_dim:dim:project_dim）
-            dim_meta = int(meta.get("dim", 0) or 0)
-            domain = (
-                f"text:{int(meta.get('source_dim', 0) or 0)}:{dim_meta}:"
-                f"{int(meta.get('project_dim', 0) or 0)}"
-            )
+            try:
+                dim_meta = int(meta.get("dim", 0) or 0)
+                domain = (
+                    f"text:{int(meta.get('source_dim', 0) or 0)}:{dim_meta}:"
+                    f"{int(meta.get('project_dim', 0) or 0)}"
+                )
+            except (TypeError, ValueError):
+                return None, None  # 畸形 meta → 受控回退（与非文本帧路径对称）
             if strict and not verify_packet(
                 tb,
                 "",
@@ -568,7 +571,10 @@ class SynapseSession:
                 return None, None
         except (ValueError, TypeError, IndexError):
             return None, None  # 畸形帧（空 handles/非对齐长度/越界索引/奇数向量字节等）→ 回退链
-        hits = self.vec_index.search(yq_hat, k=1)
+        try:
+            hits = self.vec_index.search(yq_hat, k=1)
+        except (ValueError, TypeError):
+            return None, None  # 防御深度：向量长度与解码 dim 失配等 → 回退链（复核 P3-5）
         if not hits:
             return None, None
         h, sim = hits[0]
