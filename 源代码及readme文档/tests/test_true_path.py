@@ -781,3 +781,33 @@ def test_frame_dimension_meta_tamper_rejected_projection_domain():
     assert session._receive_frame(ok, m)[0] is not None
     for field_, bad in _tamper_variants(frame):
         assert session._receive_frame(bad, m) == (None, None), f"篡改 {field_} 必须被拒"
+
+
+def test_query_top1_eligibility_filters_derived_units():
+    # #149012 C1b：query_top1 候选资格=内容记忆（kind=evidence）——检索 top-1 为派生单元
+    # （conclusion）时跳过取次位内容单元；全程不读 Y（无 oracle 泄漏）；全派生时诚实退化 None
+    from synapse.memory.tom import ToMPredictor
+    from synapse.memory.store import MemoryUnit
+    from synapse.stateplane.embedding import HashEmbedder as HE
+
+    emb = HE(Config().embed_dim)
+    tom = ToMPredictor(None, emb, Config(base_policy="query_top1"))
+    y = emb.encode("alpha beta gamma")
+    concl = MemoryUnit("c1", "r", "t", "topic", "s", "conclusion", "done",
+                       embedding=emb.encode("unrelated summary text"))
+    ev = MemoryUnit("e1", "r", "t", "topic", "s", "evidence", "alpha beta gamma",
+                    embedding=emb.encode("alpha beta gamma"))
+    b, mid, sim = tom.best_base([(concl, 0.9), (ev, 0.5)], y)
+    assert mid == "e1", "top-1 为派生单元时应跳过取次位内容单元"
+    assert b == ev.embedding and sim > 0.9
+    only_derived = tom.best_base([(concl, 0.9)], y)
+    assert only_derived == (None, None, 0.0), "全派生候选应诚实退化为发全量"
+
+
+def test_query_top1_contraction_trajectory():
+    # #149012 C1b：诚实口径（query_top1）下非文本字节随跨任务记忆复用收缩——
+    # 保护 smoke 验收语义（traj[-1] <= traj[0]）在新默认组合（C2 翻转后同此路径）下成立
+    cfg = Config(residual_true_path=True, base_policy="query_top1")
+    s = SynapseSession(cfg)
+    traj = [s.run_task(t)["metrics"].nontext_bytes for t in T.g1_family(4)]
+    assert traj[-1] <= traj[0], f"query_top1 下应随经验收缩：{traj}"
