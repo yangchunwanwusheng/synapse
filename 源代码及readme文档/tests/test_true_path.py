@@ -787,7 +787,8 @@ def test_frame_dimension_meta_tamper_rejected_projection_domain():
 
 def test_query_top1_eligibility_filters_derived_units():
     # #149012 C1b：query_top1 候选资格=内容记忆（kind=evidence）——检索 top-1 为派生单元
-    # （conclusion）时跳过取次位内容单元；全程不读 Y（无 oracle 泄漏）；全派生时诚实退化 None
+    # （conclusion）时跳过取次位内容单元；候选身份不以 Y 择优（sim 读 Y 仅作报告与启用门控）；
+    # 全派生时诚实退化 None
     from synapse.memory.tom import ToMPredictor
     from synapse.memory.store import MemoryUnit
     from synapse.stateplane.embedding import HashEmbedder as HE
@@ -825,6 +826,8 @@ def test_query_top1_candidate_identity_independent_of_target():
     b_rel, mid_rel, sim_rel = tom.best_base([(u, 0.9)], emb.encode("alpha beta"))
     b_irr, mid_irr, sim_irr = tom.best_base([(u, 0.9)], emb.encode("totally different words"))
     assert mid_rel == mid_irr == "e1", "候选身份不随 Y 改变"
+    # 注意：sim_irr >= 0 依赖两句文本在 64 维带符号哈希下索引零碰撞（异号碰撞会得负 cos）；
+    # blake2b 确定性保证当前组合恒成立，更换测试字符串时须复核该前提
     assert sim_rel > sim_irr >= 0, "sim 仅随 Y 报告；启用门控在 synapse_mode 层（sim>0）"
 
 
