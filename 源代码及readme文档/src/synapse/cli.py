@@ -579,11 +579,8 @@ def cmd_hotpot_stats(args) -> int:
     return 0 if (token_ok and noninferior) else 1
 
 
-def main(argv=None) -> int:
-    try:  # Windows 控制台/重定向默认 GBK，无法编码 − ± Δ 等 Unicode；强制 UTF-8 防崩/防乱码
-        sys.stdout.reconfigure(encoding="utf-8")
-    except Exception:
-        pass
+def _build_parser() -> argparse.ArgumentParser:
+    """构造 CLI 解析器（独立成函数便于测试断言参数面，如 #149012 的 embedder 枚举收窄）。"""
     p = argparse.ArgumentParser(prog="synapse")
     sub = p.add_subparsers(dest="cmd", required=True)
     sub.add_parser("smoke", help="离线 mock 自检").set_defaults(func=cmd_smoke)
@@ -611,13 +608,13 @@ def main(argv=None) -> int:
     cq = sub.add_parser("coqa", help="真实数据集(CoQA)对话式 QA：真实 token + F1 对比")
     cq.add_argument("--config", default=None)
     cq.add_argument("--convs", type=int, default=2)
-    cq.add_argument("--embedder", default="api", choices=["api", "hash", "sentence"])
+    cq.add_argument("--embedder", default="api", choices=["api", "hash"])
     cq.add_argument("--k", type=int, default=6, help="synapse 每轮检索故事句数")
     cq.set_defaults(func=cmd_coqa)
     hp = sub.add_parser("hotpot", help="真实数据集(HotpotQA distractor)：丢干扰段，真实 token + F1")
     hp.add_argument("--config", default=None)
     hp.add_argument("--n", type=int, default=10, help="题数")
-    hp.add_argument("--embedder", default="api", choices=["api", "hash", "sentence"])
+    hp.add_argument("--embedder", default="api", choices=["api", "hash"])
     hp.add_argument("--k", type=int, default=3, help="synapse 每题检索段数（10 段取 k）")
     hp.add_argument("--seed", type=int, default=None, help="题序 shuffle seed（P0-4 可复现性；None=原序）")
     hp.add_argument(
@@ -630,7 +627,7 @@ def main(argv=None) -> int:
     mq = sub.add_parser("musique", help="真实数据集(MuSiQue)：20 段干扰更密，第二数据集交叉验证")
     mq.add_argument("--config", default=None)
     mq.add_argument("--n", type=int, default=10, help="题数")
-    mq.add_argument("--embedder", default="api", choices=["api", "hash", "sentence"])
+    mq.add_argument("--embedder", default="api", choices=["api", "hash"])
     mq.add_argument("--k", type=int, default=3, help="synapse 每题检索段数（20 段取 k）")
     mq.add_argument("--seed", type=int, default=None, help="题序 shuffle seed（P0-4 可复现性）")
     mq.add_argument(
@@ -644,9 +641,18 @@ def main(argv=None) -> int:
     hs.add_argument("--config", default=None)
     hs.add_argument("--n", type=int, default=50, help="题数")
     hs.add_argument("--repeats", type=int, default=3, help="重复次数（捕捉 temp=0 MoE 非确定）")
-    hs.add_argument("--embedder", default="api", choices=["api", "hash", "sentence"])
+    hs.add_argument("--embedder", default="api", choices=["api", "hash"])
     hs.add_argument("--k", type=int, default=3, help="synapse 每题检索段数（10 段取 k）")
     hs.set_defaults(func=cmd_hotpot_stats)
+    return p
+
+
+def main(argv=None) -> int:
+    try:  # Windows 控制台/重定向默认 GBK，无法编码 − ± Δ 等 Unicode；强制 UTF-8 防崩/防乱码
+        sys.stdout.reconfigure(encoding="utf-8")
+    except Exception:
+        pass
+    p = _build_parser()
     args = p.parse_args(argv)
     try:
         return args.func(args)

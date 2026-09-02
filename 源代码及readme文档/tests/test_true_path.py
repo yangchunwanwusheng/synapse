@@ -811,3 +811,34 @@ def test_query_top1_contraction_trajectory():
     s = SynapseSession(cfg)
     traj = [s.run_task(t)["metrics"].nontext_bytes for t in T.g1_family(4)]
     assert traj[-1] <= traj[0], f"query_top1 下应随经验收缩：{traj}"
+
+
+def test_sentence_embedder_tier_fully_removed():
+    # #149012 C3：sentence 死分支物理删除后，Config/YAML/CLI 三入口必须全部拒绝，
+    # 不得静默回退 hash（虚假门面复发即红线）
+    import pytest
+
+    from synapse.config import Config, ConfigError, load_config
+
+    with pytest.raises(ConfigError):
+        Config(embedder="sentence")
+    with pytest.raises(ConfigError):
+        Config(embedder="hashh")  # typo 同样构造即失败（枚举校验）
+    cfg_yaml = Config()
+    assert cfg_yaml.embedder == "hash"
+    import yaml as _yaml
+
+    p = os.path.join(os.path.dirname(os.path.abspath(__file__)), "_tmp_sentence.yaml")
+    with open(p, "w", encoding="utf-8") as f:
+        f.write(_yaml.safe_dump({"embedder": "sentence"}))
+    try:
+        with pytest.raises(ConfigError):
+            load_config(p)
+    finally:
+        os.remove(p)
+    from synapse.cli import _build_parser
+
+    for action in _build_parser()._actions:
+        if action.dest == "embedder":
+            assert "sentence" not in action.choices, "CLI --embedder 不得再接受 sentence"
+            assert set(action.choices) == {"api", "hash"}

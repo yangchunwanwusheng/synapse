@@ -2,7 +2,10 @@
 
 - HashEmbedder：纯 stdlib 特征哈希，确定性、离线、零依赖（供 smoke/CI）。
   共享 token 的文本得到相近向量 → 支持语义检索与 ToM 预测的骨架演示。
-- SentenceEmbedder：真实路径（sentence-transformers），可选依赖，缺失自动回退 HashEmbedder。
+- ApiEmbedder：真实路径（OpenAI 兼容句向量 API，embedder="api"）。
+
+历史注记：sentence-transformers 本地档（embedder="sentence"）因 import 指向不存在模块
+构成虚假门面，已随 #149012 物理删除；真实句向量统一走 api 档。
 """
 
 from __future__ import annotations
@@ -108,14 +111,6 @@ def make_embedder(cfg) -> Embedder:
         try:  # 真实句向量（Paratera GLM-Embedding-3 等）
             if cfg.api_key():
                 return ApiEmbedder(cfg)
-        except Exception:
-            pass
-    if cfg.embedder == "sentence":
-        try:  # 可选依赖，本地 sentence-transformers
-            from sentence_transformers import SentenceTransformer  # noqa: F401
-            from .embedding_sentence import SentenceEmbedder
-
-            return SentenceEmbedder(cfg)
         except Exception:
             pass
     return HashEmbedder(dim=cfg.embed_dim)

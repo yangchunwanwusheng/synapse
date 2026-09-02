@@ -163,7 +163,7 @@ SYNAPSE 不是概念图上的算法组合，而是一套可以编译、运行、
 
 ```bash
 uv sync                                                       # 基础：仅离线 mock 自检所需
-uv sync --extra api --extra embed --extra vector --extra config   # 真实 API 评测所需
+uv sync --extra api --extra vector --extra config   # 真实 API 评测所需
 uv sync --extra dev                                           # 测试与 lint（pytest / ruff）
 ```
 

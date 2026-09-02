@@ -8,7 +8,6 @@ dependencies = ["smolagents>=1.26"]   # 基座：轻依赖 agent 运行时（Cod
 
 [project.optional-dependencies]
 api = ["openai>=1.40"]                                   # Paratera 真实 LLM（smolagents.OpenAIServerModel，OpenAI 兼容）
-embed = ["sentence-transformers>=3.0", "numpy>=1.26"]   # 真实句向量
 vector = ["faiss-cpu>=1.8"]                              # 向量检索
 config = ["omegaconf>=2.3", "pyyaml>=6.0"]              # YAML 配置覆盖
 viz = ["matplotlib>=3.8"]                               # 实验报告作图（收缩曲线）

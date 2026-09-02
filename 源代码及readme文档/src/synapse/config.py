@@ -56,7 +56,7 @@ class Config:
 
     # ---- 后端（骨架默认全离线 mock；真实路径 = Paratera 算力平台，OpenAI 兼容）----
     llm_backend: str = "mock"  # "mock" | "paratera"
-    embedder: str = "hash"  # "hash" | "sentence" | "api"
+    embedder: str = "hash"  # "hash" | "api"（sentence 档已随 #149012 物理删除，真实句向量走 api）
     model: str = "Qwen3-235B-A22B-Instruct-2507"  # MoE(22B激活)+Instruct(非thinking)；2026-07-08 从 30B-A3B 切换（账户权限失效）
     api_base: str = "https://llmapi.paratera.com/v1"
     api_key_env: str = "PARATERA_API_KEY"
@@ -67,6 +67,7 @@ class Config:
     _ENUMS: ClassVar[dict[str, tuple[str, ...]]] = {
         "base_policy": ("oracle", "query_top1", "learned"),
         "qa_story_mode": ("full", "sentences"),
+        "embedder": ("hash", "api"),
     }
 
     def __post_init__(self):

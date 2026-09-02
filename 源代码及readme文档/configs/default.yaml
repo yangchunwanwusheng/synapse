@@ -19,7 +19,7 @@ seeds: [0, 1, 2]
 
 # 后端（默认全离线 mock；真实路径 = Paratera 算力平台，见 README）
 llm_backend: mock          # mock | paratera
-embedder: hash             # hash | sentence | api
+embedder: hash             # hash | api
 model: Qwen3-30B-A3B-Instruct-2507
 api_base: https://llmapi.paratera.com/v1
 api_key_env: PARATERA_API_KEY

@@ -8,7 +8,8 @@
 - eval      : 双模式 A/B 评测与度量
 
 基座 smolagents（轻依赖、CodeAct 原生=M11）；离线路径用 MockChatModel + HashEmbedder（确定性、零网络）可 CI；
-真实实验路径（Paratera 算力平台 via OpenAIServerModel + sentence-embedding）为可选 extras。
+真实实验路径（Paratera 算力平台 via OpenAIServerModel + api 档句向量）为可选 extras
+（sentence-transformers 本地档已随 #149012 删除）。
 """
 
 __version__ = "0.1.0"
