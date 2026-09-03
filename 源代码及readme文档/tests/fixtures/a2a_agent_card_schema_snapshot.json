@@ -1,0 +1,65 @@
+{
+  "pinned_source": {
+    "repo": "a2aproject/A2A",
+    "commit": "98853be376c88df25e1704771cd3ea9ef8823a96",
+    "file": "specification/a2a.proto",
+    "url": "https://github.com/a2aproject/A2A/blob/98853be376c88df25e1704771cd3ea9ef8823a96/specification/a2a.proto",
+    "verified_at": "2026-09-03",
+    "note": "静态冻结快照（Issue #149015：不动态抓取）。proto 为 canonical 正源（a2a.json 是其构建产物且不入库）。JSON 键名按 protobuf JSON 映射转 lowerCamelCase。本 fixture 只能检测'本项目实现是否偏离已 pin 快照'，不能检测上游规范是否已更新——升级须人工重核并更新本文件与来源指针。"
+  },
+  "protocol_version_examples": ["0.3", "1.0"],
+  "messages": {
+    "AgentCard": {
+      "json_fields": {
+        "name": {"required": true, "type": "string"},
+        "description": {"required": true, "type": "string"},
+        "supportedInterfaces": {"required": true, "type": "AgentInterface[]"},
+        "provider": {"required": false, "type": "AgentProvider"},
+        "version": {"required": true, "type": "string"},
+        "documentationUrl": {"required": false, "type": "string"},
+        "capabilities": {"required": true, "type": "AgentCapabilities"},
+        "securitySchemes": {"required": false, "type": "map<string, SecurityScheme>"},
+        "securityRequirements": {"required": false, "type": "SecurityRequirement[]"},
+        "defaultInputModes": {"required": true, "type": "string[]"},
+        "defaultOutputModes": {"required": true, "type": "string[]"},
+        "skills": {"required": true, "type": "AgentSkill[]"},
+        "signatures": {"required": false, "type": "AgentCardSignature[]"},
+        "iconUrl": {"required": false, "type": "string"}
+      }
+    },
+    "AgentInterface": {
+      "json_fields": {
+        "url": {"required": true, "type": "string"},
+        "protocolBinding": {"required": true, "type": "string"},
+        "tenant": {"required": false, "type": "string"},
+        "protocolVersion": {"required": true, "type": "string"}
+      }
+    },
+    "AgentProvider": {
+      "json_fields": {
+        "url": {"required": true, "type": "string"},
+        "organization": {"required": true, "type": "string"}
+      }
+    },
+    "AgentCapabilities": {
+      "json_fields": {
+        "streaming": {"required": false, "type": "bool"},
+        "pushNotifications": {"required": false, "type": "bool"},
+        "extensions": {"required": false, "type": "AgentExtension[]"},
+        "extendedAgentCard": {"required": false, "type": "bool"}
+      }
+    },
+    "AgentSkill": {
+      "json_fields": {
+        "id": {"required": true, "type": "string"},
+        "name": {"required": true, "type": "string"},
+        "description": {"required": true, "type": "string"},
+        "tags": {"required": true, "type": "string[]"},
+        "examples": {"required": false, "type": "string[]"},
+        "inputModes": {"required": false, "type": "string[]"},
+        "outputModes": {"required": false, "type": "string[]"},
+        "securityRequirements": {"required": false, "type": "SecurityRequirement[]"}
+      }
+    }
+  }
+}
