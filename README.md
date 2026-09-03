@@ -48,7 +48,7 @@
 
 ### 01　📡 结构化通信：先让 Agent 说同一种语言
 
-SYNAPSE 以统一消息协议承载动作、参数、结果与能力描述，并通过 CNR（Capability Negotiation & Resolution）完成握手、能力发现、编码协商与任务路由，可与业界 A2A Agent Card 标准做协议映射。自然语言不再承担全部控制职责，Agent 之间交换的是边界清晰、可以调度、可以度量的协作意图。
+SYNAPSE 以统一消息协议承载动作、参数、结果与能力描述。CNR（Capability Negotiation & Resolution）在握手时经 `hello` 登记本地能力并对 probe 声明做运行时探测记录；协议层提供冷启动能力发现：新成员向已注册同伴逐一发送 `CAP_QUERY`，同伴以 `CAP_REPLY` 返回能力声明，响应经方向/关联/身份校验后写入独立能力视图，再据此完成动作路由（按 role/action 选目标）与编码协商（negotiate 取双方交集最高密度编码）。另提供与 A2A Agent Card（Linux Foundation，pinned v1.0 规范快照入库）的静态字段映射。以上均经进程内集成测试与 wire 双端点往返测试验证（见 `tests/test_capability_discovery.py`、`tests/test_a2a_mapping.py`）；当前不宣称分布式广播、远端 Agent Card 发布或 A2A 跨实现互操作。自然语言不再承担全部控制职责，Agent 之间交换的是边界清晰、可以调度、可以度量的协作意图。
 
 **结果是：控制信息更短，协作关系更清楚，通信开销能够被真正计算。**
 
