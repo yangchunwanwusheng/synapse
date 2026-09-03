@@ -218,8 +218,12 @@ uv run python scripts/fetch_coqa.py 5        # → data/coqa_sample.json     （
 | `uv run synapse musique --config configs/vectorengine.yaml --n 10 --embedder api --k 3` | MuSiQue token ↓ **80.9%**（N=3 探索性点估计，`runs/musique_20260724_203011/`；多参考重评与扩样见聚合表） |
 | `uv run synapse hotpot-stats --config configs/vectorengine.yaml --n 50 --repeats 3` | 统计稳健化：配对检验 + 95% CI（质量非劣验证） |
 | `uv run synapse coqa --config configs/vectorengine.yaml --convs 2 --embedder api --k 6` | CoQA 对话式真实 token + F1 |
+| `uv run synapse hotpot --config configs/vectorengine.yaml --topology team-inproc --n 3 --embedder api --k 3` | HotpotQA 四角色 CodeAgent 进程内团队轨 + per-Agent 消息/字节/token/步数 |
+| `uv run synapse coqa --config configs/vectorengine.yaml --topology team-inproc --convs 1 --embedder api --k 6` | CoQA 四角色 CodeAgent 进程内团队轨 + 逐 turn EM/F1 |
 
 `--retrieval single|twohop|bridge` 切换单跳 / 嵌入查询扩展 / 词法实体桥接；`--seed` 固定题序以复现。
+`team-inproc` 结果使用独立 run 标签和 `team_total` 口径，不并入既有 solo 数字；多进程团队轨依赖
+#148748 段二，完成前不得将进程内结果表述为多进程证据。
 
 ### ④ 消融与机制验证
 

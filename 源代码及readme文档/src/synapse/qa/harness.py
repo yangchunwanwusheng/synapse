@@ -7,6 +7,7 @@ from ..stateplane.embedding import make_embedder
 from .dataset import load_conversations, load_hotpot
 from .pipeline import run_synapse, run_synapse_hotpot, run_text, run_text_hotpot
 from .stats import cluster_bootstrap_ci, mean_std, paired_winloss, variance_components
+from .team_pipeline import run_team_coqa, run_team_hotpot
 
 
 def _agg(traj: list[Metrics]) -> Metrics:
@@ -113,6 +114,51 @@ def run_hotpot(
         "levels": [it.level for it in items],
         "per_item": per_item,
         "improvement": improvement(tm, sm),
+    }
+
+
+def run_hotpot_team(
+    cfg, n_items: int = 10, path: str = "data/hotpot_sample.json", seed: int | None = None
+) -> dict:
+    """HotpotQA team-inproc evidence, kept separate from the solo A/B result shape."""
+    items = load_hotpot(path, n_items, seed=seed)
+    raw = run_team_hotpot(items, cfg)
+    return {
+        "topology": raw["topology"],
+        "n_items": len(items),
+        "para_k": cfg.qa_para_k,
+        "team_total": raw["metrics"].summary(),
+        "team_f1_per_item": raw["f1_per_item"],
+        "team_em_per_item": raw["em_per_item"],
+        "mean_em": round(sum(raw["em_per_item"]) / len(items), 4) if items else 0.0,
+        "gold_recall": raw["gold_recall"],
+        "per_item": raw["per_item"],
+    }
+
+
+def run_coqa_team(cfg, n_conv: int = 2, path: str = "data/coqa_sample.json") -> dict:
+    """CoQA team-inproc evidence aggregated across conversations without solo metrics."""
+    conversations = load_conversations(path, n_conv)
+    trajectories: list[Metrics] = []
+    per_item: list[dict] = []
+    f1s: list[float] = []
+    ems: list[float] = []
+    for conversation in conversations:
+        raw = run_team_coqa(conversation, cfg)
+        trajectories.append(raw["metrics"])
+        per_item.extend(raw["per_item"])
+        f1s.extend(raw["f1_per_turn"])
+        ems.extend(raw["em_per_turn"])
+    total = _agg(trajectories)
+    return {
+        "topology": "team-inproc",
+        "n_conversations": len(conversations),
+        "n_turns": len(per_item),
+        "team_total": total.summary(),
+        "team_f1_per_turn": f1s,
+        "team_em_per_turn": ems,
+        "mean_em": round(sum(ems) / len(ems), 4) if ems else 0.0,
+        "per_item": per_item,
     }
 
 

@@ -2,7 +2,8 @@
 
 from __future__ import annotations
 
-from dataclasses import asdict, dataclass, fields as dataclasses_fields
+from dataclasses import asdict, dataclass, field
+from dataclasses import fields as dataclasses_fields
 from typing import ClassVar
 
 
@@ -26,6 +27,7 @@ class Metrics:
     llm_tokens: int = 0  # 旧口径(=输出)；向后兼容合成管线
     llm_input_tokens: int = 0  # 真实 LLM 输入 token（通信成本主项：上下文/历史摄入）
     llm_output_tokens: int = 0  # 真实 LLM 输出 token
+    steps: int = 0  # CodeAgent action steps；团队轨按 agent 分解并与此总数守恒
     latency_s: float = 0.0
     quality: float = 0.0  # CoQA: 词级 F1
     # §1.2 三档混合协议：发送方按预测基相似度预判选档，而非只靠接收方事后校验
@@ -55,6 +57,18 @@ class Metrics:
     embed_input_tokens: int = 0  # embedding API usage.prompt_tokens 累计（后端无 usage 时为 0）
     cas_writes: int = 0  # CAS put 次数（共享状态建立成本，cold）
     cas_write_bytes: int = 0  # CAS put 累计字节
+    agent_metrics: dict[str, dict[str, int]] = field(default_factory=dict)
+
+    _AGENT_FIELDS: ClassVar[tuple[str, ...]] = (
+        "messages",
+        "header_bytes",
+        "text_bytes",
+        "nontext_bytes",
+        "transport_bytes",
+        "llm_input_tokens",
+        "llm_output_tokens",
+        "steps",
+    )
 
     @property
     def llm_total_tokens(self) -> int:
@@ -62,19 +76,28 @@ class Metrics:
         return self.llm_input_tokens + self.llm_output_tokens
 
     def record_message(self, msg) -> None:
+        header_bytes = msg.header_bytes()
+        transport_bytes = len(msg.to_wire().encode("utf-8"))
+        text_bytes = msg.text_bytes()
+        nontext_bytes = msg.meta.get("nontext_bytes", 0)
         self.messages += 1
-        self.header_bytes += msg.header_bytes()
+        self.header_bytes += header_bytes
         # 传输口径对 to_wire() 真实帧长计数（含 capability/meta/text 等全部字段），
         # 与逻辑口径（header+text+nontext）分离：R-P0-7 手工相加代理值的根治。
-        self.transport_bytes += len(msg.to_wire().encode("utf-8"))
-        tb = msg.text_bytes()
-        if tb:
-            self.text_bytes += tb
+        self.transport_bytes += transport_bytes
+        if text_bytes:
+            self.text_bytes += text_bytes
             self.text_tokens += len((msg.text or "").split())
-        nb = msg.meta.get("nontext_bytes", 0)
-        if nb:
+        if nontext_bytes:
             self.nontext_transfers += 1
-            self.nontext_bytes += nb
+            self.nontext_bytes += nontext_bytes
+        if self.mode == "team-inproc":
+            agent = self._agent_bucket(msg.sender)
+            agent["messages"] += 1
+            agent["header_bytes"] += header_bytes
+            agent["text_bytes"] += text_bytes
+            agent["nontext_bytes"] += nontext_bytes
+            agent["transport_bytes"] += transport_bytes
         if msg.meta.get("fallback"):
             self.fallbacks += 1
             self.fallback_steps += 1  # 每条降档重发帧 = 1 跳（events 由会话层在首帧失败时计 1）
@@ -85,23 +108,23 @@ class Metrics:
         tier = msg.meta.get("tier")
         if tier == "residual":
             self.tier_residual += 1
-            self.tier_residual_bytes += nb
+            self.tier_residual_bytes += nontext_bytes
         elif tier == "residual_zero":
             self.tier_residual_zero += 1
-            self.tier_residual_zero_bytes += nb
+            self.tier_residual_zero_bytes += nontext_bytes
         elif tier == "embedding":
             self.tier_embedding += 1
-            self.tier_embedding_bytes += nb
+            self.tier_embedding_bytes += nontext_bytes
         elif tier == "text":
             self.tier_text += 1
         # V3-04 ToM 选基三档字节分列（真通路帧带 meta.base_policy；oracle=乐观口径须与诚实口径并报）
-        bp = msg.meta.get("base_policy") if nb else None  # 仅非文本帧计入（text 帧 nb=0 不污染分列）
+        bp = msg.meta.get("base_policy") if nontext_bytes else None  # 仅非文本帧计入（text 帧不污染）
         if bp == "oracle":
-            self.base_bytes_oracle += nb
+            self.base_bytes_oracle += nontext_bytes
         elif bp == "query_top1":
-            self.base_bytes_query_top1 += nb
+            self.base_bytes_query_top1 += nontext_bytes
         elif bp == "learned":
-            self.base_bytes_learned += nb
+            self.base_bytes_learned += nontext_bytes
         if msg.meta.get("spilled"):  # §2.3 result spill 降级
             self.result_spills += 1
 
@@ -109,6 +132,24 @@ class Metrics:
         self.memory_queries += 1
         if hit:
             self.memory_hits += 1
+
+    def _agent_bucket(self, agent_id: str) -> dict[str, int]:
+        if agent_id not in self.agent_metrics:
+            self.agent_metrics[agent_id] = {name: 0 for name in self._AGENT_FIELDS}
+        return self.agent_metrics[agent_id]
+
+    def record_agent_run(self, agent_id: str, input_tokens: int, output_tokens: int, steps: int) -> None:
+        """Record one completed CodeAgent run and preserve per-agent/global conservation."""
+        values = (input_tokens, output_tokens, steps)
+        if any(type(value) is not int or value < 0 for value in values):
+            raise ValueError("agent token and step counters must be non-negative integers")
+        agent = self._agent_bucket(agent_id)
+        agent["llm_input_tokens"] += input_tokens
+        agent["llm_output_tokens"] += output_tokens
+        agent["steps"] += steps
+        self.llm_input_tokens += input_tokens
+        self.llm_output_tokens += output_tokens
+        self.steps += steps
 
     @property
     def wire_bytes(self) -> int:
@@ -126,7 +167,7 @@ class Metrics:
 
     _NUMERIC_FIELDS: ClassVar[tuple[str, ...]] = ()  # absorb 累加字段表；模块加载时按注解填充（见文件尾）
 
-    def absorb(self, other: "Metrics") -> None:
+    def absorb(self, other: Metrics) -> None:
         """按字段累加另一份 Metrics（quality 语义 = 均值量，累加后由调用方除以 n）。
 
         统一累加路径：新增计数字段不再需要逐处 _agg 手工补行（合成 AB 聚合漏加
@@ -134,9 +175,15 @@ class Metrics:
         """
         for name in Metrics._NUMERIC_FIELDS:
             setattr(self, name, getattr(self, name) + getattr(other, name))
+        for agent_id, counters in other.agent_metrics.items():
+            target = self._agent_bucket(agent_id)
+            for name in self._AGENT_FIELDS:
+                target[name] += counters[name]
 
     def summary(self) -> dict:
         d = asdict(self)
+        if not self.agent_metrics:
+            d.pop("agent_metrics")  # legacy/solo tracks have no defensible per-agent token ownership
         d["wire_bytes"] = self.wire_bytes
         d["logical_bytes"] = self.logical_bytes
         d["hit_rate"] = round(self.hit_rate, 3)

@@ -107,6 +107,44 @@ def test_metrics_absorb_conservation():
     assert (a.messages, a.llm_input_tokens, a.transport_bytes, a.quality) == (5, 150, 1200, 1.5)
 
 
+def test_agent_metrics_conserve_messages_bytes_tokens_and_steps():
+    m = Metrics(mode="team-inproc")
+    first, second = _msgs()[:2]
+    m.record_message(first)
+    m.record_message(second)
+    m.record_agent_run("a", input_tokens=11, output_tokens=3, steps=1)
+    m.record_agent_run("b", input_tokens=17, output_tokens=5, steps=2)
+
+    summary = m.summary()
+    required = {
+        "messages",
+        "header_bytes",
+        "text_bytes",
+        "nontext_bytes",
+        "transport_bytes",
+        "llm_input_tokens",
+        "llm_output_tokens",
+        "steps",
+    }
+    assert set(summary["agent_metrics"]) == {"a", "b"}
+    assert required <= set(summary["agent_metrics"]["a"])
+    for field in required:
+        assert sum(agent[field] for agent in summary["agent_metrics"].values()) == summary[field]
+
+
+def test_agent_metrics_absorb_merges_agent_buckets():
+    left, right = Metrics(mode="team-inproc"), Metrics(mode="team-inproc")
+    left.record_agent_run("planner-1", input_tokens=5, output_tokens=2, steps=1)
+    right.record_agent_run("planner-1", input_tokens=7, output_tokens=3, steps=2)
+    right.record_agent_run("retriever-1", input_tokens=11, output_tokens=4, steps=1)
+
+    left.absorb(right)
+
+    assert left.agent_metrics["planner-1"]["llm_input_tokens"] == 12
+    assert left.agent_metrics["planner-1"]["steps"] == 3
+    assert left.agent_metrics["retriever-1"]["llm_output_tokens"] == 4
+
+
 def test_usage_missing_fails():
     # 真实后端响应缺 token_usage / usage 壳但字段不可用 → 全部显式 fail（审查 P0-3）
     bad_msgs = [
@@ -356,6 +394,59 @@ def _full_metrics() -> dict:
         "cas_writes": 1,
         "cas_write_bytes": 30,
     }
+
+
+def test_schema_accepts_conserved_team_agent_metrics():
+    metrics = {
+        **_full_metrics(),
+        "messages": 2,
+        "steps": 3,
+        "agent_metrics": {
+            "planner-1": {
+                "messages": 1,
+                "header_bytes": 4,
+                "text_bytes": 10,
+                "nontext_bytes": 0,
+                "transport_bytes": 20,
+                "llm_input_tokens": 4,
+                "llm_output_tokens": 1,
+                "steps": 1,
+            },
+            "summarizer-1": {
+                "messages": 1,
+                "header_bytes": 6,
+                "text_bytes": 10,
+                "nontext_bytes": 10,
+                "transport_bytes": 30,
+                "llm_input_tokens": 6,
+                "llm_output_tokens": 1,
+                "steps": 2,
+            },
+        },
+    }
+    doc = {
+        "schema_version": "1.0.0",
+        "config": {},
+        "manifest": _mini_manifest("hotpot --topology team-inproc"),
+        "result": {"topology": "team-inproc", "team_total": metrics},
+    }
+    assert validate_run_result(doc) == []
+
+
+def test_schema_rejects_nonconserved_team_agent_metrics():
+    metrics = Metrics(mode="team-inproc")
+    metrics.record_message(Message("m1", "planner-1", "retriever-1", ActionType.PLAN.value))
+    metrics.record_agent_run("planner-1", input_tokens=3, output_tokens=1, steps=1)
+    summary = metrics.summary()
+    summary["agent_metrics"]["planner-1"]["transport_bytes"] += 1
+    doc = {
+        "schema_version": "1.0.0",
+        "config": {},
+        "manifest": _mini_manifest("hotpot --topology team-inproc"),
+        "result": {"topology": "team-inproc", "team_total": summary},
+    }
+    errors = validate_run_result(doc)
+    assert any("agent_metrics" in error and "transport_bytes" in error for error in errors)
 
 
 def test_hotpot_per_item_layer():

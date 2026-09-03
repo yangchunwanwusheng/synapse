@@ -53,6 +53,7 @@ class Config:
     qa_history_k: int = 2  # [CoQA] synapse 每轮复用的相关历史 Q&A 数（紧凑记忆，非全量透传）
     qa_para_k: int = 3  # [HotpotQA] synapse 每题检索的相关段落数（10 段中只取 k，丢干扰段）
     qa_retrieval: str = "single"  # [HotpotQA] "single"=单跳问题检索 | "twohop"=两跳(用第一跳内容补检索桥接段)
+    qa_topology: str = "solo"  # solo=既有单模型 QA | team-inproc=四 CodeAgent 进程内团队轨
 
     # ---- CodeAct 执行器（V3-08 / Issue #148750：执行边界如实化）----
     codeact_executor: str = "local"  # "local"=进程内受限解释器(smolagents 线程超时，历史口径) | "subprocess"=进程级隔离执行器(超时可强杀+POSIX 资源限制)；两模式同一 import 白名单与 state 语义
@@ -75,6 +76,7 @@ class Config:
     _ENUMS: ClassVar[dict[str, tuple[str, ...]]] = {
         "base_policy": ("oracle", "query_top1", "learned"),
         "qa_story_mode": ("full", "sentences"),
+        "qa_topology": ("solo", "team-inproc"),
         "codeact_executor": ("local", "subprocess"),
     }
 

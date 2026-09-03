@@ -29,7 +29,17 @@ _METRIC_KEYS = (
     "cas_writes",
     "cas_write_bytes",
 )
-_METRIC_DICT_NAMES = ("text", "synapse", "text_total", "synapse_total")
+_METRIC_DICT_NAMES = ("text", "synapse", "text_total", "synapse_total", "team", "team_total")
+_AGENT_METRIC_KEYS = (
+    "messages",
+    "header_bytes",
+    "text_bytes",
+    "nontext_bytes",
+    "transport_bytes",
+    "llm_input_tokens",
+    "llm_output_tokens",
+    "steps",
+)
 # manifest 必填元信息（docs/schema/run-result.schema.md 第 1 层契约）
 _MANIFEST_KEYS = (
     "command",
@@ -53,7 +63,37 @@ def _is_count(v) -> bool:
 
 def _is_metrics_dict(name: str, d) -> bool:
     """识别一个 dict 是否为模式聚合 metrics（名字匹配或 *_metrics 后缀）。"""
-    return isinstance(d, dict) and (name in _METRIC_DICT_NAMES or name.endswith("_metrics"))
+    return isinstance(d, dict) and (
+        name in _METRIC_DICT_NAMES or (name.endswith("_metrics") and name != "agent_metrics")
+    )
+
+
+def _check_agent_metrics(name: str, metrics: dict, errors: list[str]) -> None:
+    agents = metrics.get("agent_metrics")
+    if not isinstance(agents, dict) or not agents:
+        errors.append(f"{name}.agent_metrics 必须是非空 dict")
+        return
+    for agent_id, counters in agents.items():
+        if not isinstance(agent_id, str) or not agent_id or not isinstance(counters, dict):
+            errors.append(f"{name}.agent_metrics 的 agent id 与计数必须为非空字符串/dict")
+            continue
+        for key in _AGENT_METRIC_KEYS:
+            value = counters.get(key)
+            if not _is_count(value):
+                errors.append(
+                    f"{name}.agent_metrics.{agent_id}.{key} 必须是非负整数，实得 {value!r}"
+                )
+    for key in _AGENT_METRIC_KEYS:
+        if not _is_count(metrics.get(key)):
+            errors.append(f"{name}.{key} 缺失或不是非负整数，无法校验 agent_metrics 守恒")
+            continue
+        values = [counters.get(key) for counters in agents.values() if isinstance(counters, dict)]
+        if len(values) == len(agents) and all(_is_count(value) for value in values):
+            total = sum(values)
+            if total != metrics[key]:
+                errors.append(
+                    f"{name}.agent_metrics {key} 不守恒：agent 合计 {total} != aggregate {metrics[key]}"
+                )
 
 
 def _check_metrics_dict(name: str, d, errors: list[str]) -> None:
@@ -71,6 +111,8 @@ def _check_metrics_dict(name: str, d, errors: list[str]) -> None:
         errors.append(f"{name} 恒等式破坏：logical_bytes({lb}) != header({hb})+text({tb})+nontext({nb})")
     if wb is not None and lb is not None and wb != lb:
         errors.append(f"{name} wire_bytes({wb}) != logical_bytes({lb})（别名必须一致）")
+    if "agent_metrics" in d:
+        _check_agent_metrics(name, d, errors)
 
 
 def _is_error_payload(result: dict) -> bool:

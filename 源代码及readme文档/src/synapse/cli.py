@@ -51,6 +51,7 @@ def _cmd_desc(args, name: str) -> str:
         "embedder",
         "seed",
         "retrieval",
+        "topology",
     ):
         v = getattr(args, k, None)
         if v is not None and not (isinstance(v, bool) and not v):
@@ -350,20 +351,65 @@ def cmd_m7(args) -> int:
     return 0
 
 
+def _print_team_qa_result(
+    cfg, res: dict, tag: str, command: str, dataset=None, seed=None, started_utc=None
+) -> int:
+    _write_run(
+        tag,
+        cfg,
+        res,
+        command=command,
+        dataset=dataset,
+        seed=seed,
+        per_item=res.get("per_item"),
+        started_utc=started_utc,
+    )
+    total = res["team_total"]
+    print(
+        json.dumps(
+            {
+                "topology": res["topology"],
+                "items_or_turns": res.get("n_items", res.get("n_turns", 0)),
+                "team_F1": total["quality"],
+                "team_EM": res.get("mean_em", 0.0),
+                "team_tokens_in/out/total": [
+                    total["llm_input_tokens"],
+                    total["llm_output_tokens"],
+                    total["llm_total_tokens"],
+                ],
+                "agent_metrics": total["agent_metrics"],
+            },
+            ensure_ascii=False,
+            indent=2,
+        )
+    )
+    return 0
+
+
 def cmd_coqa(args) -> int:
     """真实数据集(CoQA)对话式 QA：text 基线 vs synapse，统计真实 LLM token + F1 + 记忆复用。"""
     t0 = _utc_now()
     cfg = _real_cfg(args)
     if cfg is None:
         return 2
-    cfg = replace(cfg, embedder=args.embedder, qa_sentences_k=args.k)
-    from .qa.harness import run_coqa
+    cfg = replace(cfg, embedder=args.embedder, qa_sentences_k=args.k, qa_topology=args.topology)
+    from .qa.harness import run_coqa, run_coqa_team
 
     ds = dataset_info("data/coqa_sample.json", args.convs)  # run 前锚定数据集版本（审查 P1-2）
     print(
         f"== CoQA: model={cfg.model} embedder={cfg.embedder} k={cfg.qa_sentences_k} "
-        f"convs={args.convs} (每段=1组关联连续任务) =="
+        f"topology={cfg.qa_topology} convs={args.convs} (每段=1组关联连续任务) =="
     )
+    if cfg.qa_topology == "team-inproc":
+        res = run_coqa_team(cfg, n_conv=args.convs)
+        return _print_team_qa_result(
+            cfg,
+            res,
+            "coqa_team_inproc",
+            command=_cmd_desc(args, "coqa"),
+            dataset=ds,
+            started_utc=t0,
+        )
     res = run_coqa(cfg, n_conv=args.convs)
     _write_run(
         "coqa",
@@ -423,15 +469,31 @@ def cmd_hotpot(args) -> int:
     if cfg is None:
         return 2
     cfg = replace(
-        cfg, embedder=args.embedder, qa_para_k=args.k, qa_retrieval=getattr(args, "retrieval", "single")
+        cfg,
+        embedder=args.embedder,
+        qa_para_k=args.k,
+        qa_retrieval=getattr(args, "retrieval", "single"),
+        qa_topology=args.topology,
     )
-    from .qa.harness import run_hotpot
+    from .qa.harness import run_hotpot, run_hotpot_team
 
     ds = dataset_info("data/hotpot_sample.json", args.n)  # run 前锚定数据集版本（审查 P1-2）
     print(
         f"== HotpotQA: model={cfg.model} embedder={cfg.embedder} para_k={cfg.qa_para_k} "
-        f"retrieval={cfg.qa_retrieval} items={args.n} (每题 10 段=2 金标+8 干扰) =="
+        f"retrieval={cfg.qa_retrieval} topology={cfg.qa_topology} "
+        f"items={args.n} (每题 10 段=2 金标+8 干扰) =="
     )
+    if cfg.qa_topology == "team-inproc":
+        res = run_hotpot_team(cfg, n_items=args.n, seed=getattr(args, "seed", None))
+        return _print_team_qa_result(
+            cfg,
+            res,
+            "hotpot_team_inproc",
+            command=_cmd_desc(args, "hotpot"),
+            dataset=ds,
+            seed=getattr(args, "seed", None),
+            started_utc=t0,
+        )
     res = run_hotpot(cfg, n_items=args.n, seed=getattr(args, "seed", None))
     return _print_hotpot_result(
         cfg,
@@ -613,12 +675,24 @@ def main(argv=None) -> int:
     cq.add_argument("--convs", type=int, default=2)
     cq.add_argument("--embedder", default="api", choices=["api", "hash", "sentence"])
     cq.add_argument("--k", type=int, default=6, help="synapse 每轮检索故事句数")
+    cq.add_argument(
+        "--topology",
+        default="solo",
+        choices=["solo", "team-inproc"],
+        help="QA 执行拓扑：solo=既有单模型轨；team-inproc=四 CodeAgent 进程内团队轨",
+    )
     cq.set_defaults(func=cmd_coqa)
     hp = sub.add_parser("hotpot", help="真实数据集(HotpotQA distractor)：丢干扰段，真实 token + F1")
     hp.add_argument("--config", default=None)
     hp.add_argument("--n", type=int, default=10, help="题数")
     hp.add_argument("--embedder", default="api", choices=["api", "hash", "sentence"])
     hp.add_argument("--k", type=int, default=3, help="synapse 每题检索段数（10 段取 k）")
+    hp.add_argument(
+        "--topology",
+        default="solo",
+        choices=["solo", "team-inproc"],
+        help="QA 执行拓扑：solo=既有单模型轨；team-inproc=四 CodeAgent 进程内团队轨",
+    )
     hp.add_argument("--seed", type=int, default=None, help="题序 shuffle seed（P0-4 可复现性；None=原序）")
     hp.add_argument(
         "--retrieval",

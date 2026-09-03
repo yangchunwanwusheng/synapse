@@ -191,7 +191,9 @@ def run_synapse(conv: Conversation, cfg) -> dict:
                 ActionType.TELL.value,
                 handles=handles,
                 payload_kind="embedding",
-                meta={"nontext_bytes": sum(len(h.encode()) for h in handles) + 8},
+                # 当前 QA inproc 帧仅携带 CAS 句柄；句柄已计入 header/transport，
+                # 没有随帧附带向量或残差 payload，因此 nontext 必须为 0。
+                meta={"nontext_bytes": 0},
             )
         )
         n_msg += 1
@@ -375,7 +377,8 @@ def run_synapse_hotpot(items: list[HotpotItem], cfg, embedder=None) -> dict:
                 ActionType.TELL.value,
                 handles=handles,
                 payload_kind="embedding",
-                meta={"nontext_bytes": sum(len(h.encode()) for h in handles) + 8},
+                # handle-only：句柄序列化成本属于 header/transport，不冒充非文本数据面字节。
+                meta={"nontext_bytes": 0},
             )
         )
         n_msg += 1

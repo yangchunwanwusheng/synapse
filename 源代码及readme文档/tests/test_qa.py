@@ -83,7 +83,8 @@ def test_qa_pipelines_offline_plumbing():
     ms = run_synapse(conv, cfg)["metrics"]
     assert mt.messages > 0 and ms.messages > 0
     assert mt.llm_total_tokens > 0 and ms.llm_total_tokens > 0  # 输入+输出 token 计数生效
-    assert ms.nontext_transfers > 0  # synapse 非文本状态传递（M4）
+    assert ms.nontext_bytes == 0 and ms.nontext_transfers == 0  # handle-only 帧不冒充向量/残差 payload
+    assert ms.transport_bytes > 0  # 句柄仍由真实序列化帧计入 transport 口径
     assert ms.memory_queries > 0  # synapse 检索共享记忆（M6）
 
 
@@ -126,7 +127,7 @@ def test_hotpot_pipelines_offline_plumbing():
     ms = rs["metrics"]
     assert mt.llm_total_tokens > 0 and ms.llm_total_tokens > 0
     assert ms.llm_input_tokens < mt.llm_input_tokens  # 检索 k 段 < 全 10 段
-    assert ms.nontext_transfers == len(items)  # 每题一次句柄传递（M4）
+    assert ms.nontext_transfers == 0 and ms.nontext_bytes == 0  # 仅传句柄，无实际向量/残差 payload
     assert ms.text_bytes == 0 and mt.text_bytes > 0  # synapse 不在 agent 间透传全文
     assert 0.0 <= rs["gold_recall"] <= 1.0
 
@@ -138,7 +139,8 @@ def test_hotpot_retrieval_modes():
     for mode in ("single", "twohop", "bridge"):
         cfg = replace(Config(), qa_para_k=3, qa_retrieval=mode)
         rs = run_synapse_hotpot(items, cfg)
-        assert rs["metrics"].nontext_transfers == len(items)
+        assert rs["metrics"].nontext_transfers == 0
+        assert rs["metrics"].transport_bytes > 0
         assert 0.0 <= rs["gold_recall"] <= 1.0
         recalls[mode] = rs["gold_recall"]
     assert set(recalls) == {"single", "twohop", "bridge"}
