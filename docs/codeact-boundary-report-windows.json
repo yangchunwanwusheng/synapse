@@ -1,5 +1,5 @@
 {
-  "generated_at": "2026-09-03T10:41:27+0800",
+  "generated_at": "2026-09-03T11:14:01+0800",
   "env": {
     "platform": "Windows-10-10.0.26200-SP0",
     "python": "3.11.14",
@@ -18,6 +18,12 @@
       "threads_after": 1,
       "threads_leaked": false,
       "rejected_while_draining": true,
+      "residual_thread": {
+        "threads_during_drain": 2,
+        "drain_join_wait_s": 4.0,
+        "residual_alive_during_drain": true,
+        "residual_alive_after_join": false
+      },
       "recovery_semantics": "rebuild-after-drain",
       "recovered_after_timeout": true
     },
@@ -32,6 +38,12 @@
       "threads_after": 1,
       "threads_leaked": false,
       "rejected_while_draining": null,
+      "residual_thread": {
+        "threads_during_drain": null,
+        "drain_join_wait_s": null,
+        "residual_alive_during_drain": null,
+        "residual_alive_after_join": null
+      },
       "recovery_semantics": "immediate",
       "recovered_after_timeout": true
     }
@@ -100,7 +112,7 @@
     "mode": "local",
     "open_builtin": {
       "outcome": "blocked",
-      "detail": "Code execution failed at line 'f = open('C:\\\\Users\\\\oobbee\\\\AppData\\\\Local\\\\Temp\\\\synapse-boundary-r"
+      "detail": "Code execution failed at line 'f = open('C:\\\\Users\\\\oobbee\\\\AppData\\\\Local\\\\Temp\\\\synapse-boundary-z"
     },
     "dunder_import": {
       "outcome": "blocked",

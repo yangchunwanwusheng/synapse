@@ -85,8 +85,8 @@ def test_retry_exhausted_degrades_explicitly_not_zero():
     assert "attempt0" in summary and "attempt1" in summary
 
 
-def test_type_contract_rejects_bool_float_str():
-    for bad in (True, 5.0, "42"):
+def test_type_contract_rejects_bool_float_negative():
+    for bad in (True, 5.0, -5):
         # 纯契约失败：两次尝试都返回同型坏值 → failure_kind=type_contract
         ex, _ = run_executor_with_retry(_FakeExecu([bad, bad]), _task(), "a b c")
         assert ex.status == "degraded", f"{bad!r} 不得静默转成契约成功"
@@ -95,6 +95,16 @@ def test_type_contract_rejects_bool_float_str():
         # 混合失败（坏值后假 agent 抛异常）→ 如实标 mixed，不冒充单一类型
         ex2, _ = run_executor_with_retry(_FakeExecu([bad]), _task(), "a b c")
         assert ex2.failure_kind == "mixed"
+
+
+def test_str_final_answer_single_out_as_non_int_final_answer():
+    # 复审 P2-1：str 通常是超时/步数耗尽后 provide_final_answer 的文本兜底，
+    # 单列口径，不与 bool/float 的类型契约违反混标
+    ex, _ = run_executor_with_retry(_FakeExecu(["oops", "again"]), _task(), "a b c")
+    assert ex.status == "degraded" and ex.metric is None
+    assert ex.failure_kind == "non_int_final_answer"
+    ex2, _ = run_executor_with_retry(_FakeExecu([42]), _task(), "a b c")
+    assert ex2.status == "ok"  # int 正常成功不受影响
 
 
 def test_type_contract_failure_then_int_success():

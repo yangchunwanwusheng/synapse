@@ -37,14 +37,15 @@ def _balanced_final_call(s: str) -> str | None:
 def _longest_parsable_suffix_with_final(s: str) -> str | None:
     """散文前缀 + 合法多行代码（含 final_answer）→ 恢复完整多行代码块（#149013）。
 
-    逐行尝试后缀 ast.parse，取最长且含 ``final_answer(`` 的可解析后缀；都不可解析
+    逐行尝试后缀 ast.parse，取最长且含 ``final_answer`` 调用的可解析后缀（与
+    ``_FINAL_CALL`` 同一正则，容忍 ``final_answer (x)`` 空白形态）；都不可解析
     返回 None。修复单调用提取在多行场景的缺陷：``Thought: ..\\nresult = f(x)\\n
     final_answer(result)`` 若只截取调用会丢变量赋值 → 执行必然 NameError。
     """
     lines = s.splitlines()
     for i in range(len(lines)):
         candidate = "\n".join(lines[i:]).strip()
-        if not candidate or "final_answer(" not in candidate:
+        if not candidate or not _FINAL_CALL.search(candidate):
             continue
         try:
             ast.parse(candidate)

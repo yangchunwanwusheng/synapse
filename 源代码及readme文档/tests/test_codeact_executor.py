@@ -355,6 +355,21 @@ def test_timeout_local_executor_state_property_diagnostic():
     assert "_print_outputs" in ex.state  # CodeAgent 异常诊断路径依赖该键（agents.py:1735）
 
 
+def test_timeout_local_executor_worker_base_exception_fails_readably():
+    """复审 P3：worker 被 BaseException（SystemExit 等）终止时主线程显式失败，不 KeyError。"""
+    ex = TimeoutLocalExecutor(timeout_seconds=30)
+    ex.send_tools(_fa())
+    # worker 有意不转抛 BaseException（SystemExit 属进程控制流）——线程默认 excepthook
+    # 会打日志，测试中临时静默
+    orig_hook = threading.excepthook
+    threading.excepthook = lambda args: None
+    try:
+        with pytest.raises(RuntimeError, match="without a result"):
+            ex("raise SystemExit(3)")
+    finally:
+        threading.excepthook = orig_hook
+
+
 def test_build_team_wires_timeout_local_executor_by_default():
     """#149013：local 档默认注入 TimeoutLocalExecutor（4 角色全部，独立实例）。"""
     from synapse.runtime.team import build_team

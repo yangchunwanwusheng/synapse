@@ -85,7 +85,17 @@ class TimeoutLocalExecutor:
             inner = self._inner if self._inner is not None else self._stale_inner
             return dict(inner.state) if inner is not None else {}
 
+    @property
+    def stale_thread(self) -> threading.Thread | None:
+        """超时后残留的工作线程（探针/测试诊断用）。
+
+        Python 线程不可强杀：join 只等自然结束；残留线程为 daemon，不阻塞进程退出。
+        """
+        return self._stale_thread
+
     def send_tools(self, tools: dict) -> None:
+        # 顺序假设：smolagents CodeAgent 在 run() 起始顺序调用 send_*（agents.py:489-492），
+        # 不与本实例 __call__ 并发；busy 期拒绝会破坏该内部调用序，故此处不做 busy 检查。
         with self._lock:
             self._ensure_serviceable_locked()
             self._tools = dict(tools)
@@ -135,6 +145,8 @@ class TimeoutLocalExecutor:
             self._busy = False
         if "err" in result:
             raise result["err"]
+        if "out" not in result:  # 复审 P3：worker 被 BaseException 终止（SystemExit 等）→ 显式可读失败
+            raise RuntimeError("TimeoutLocalExecutor: worker ended without a result (BaseException)")
         return result["out"]
 
     def _ensure_serviceable_locked(self) -> None:

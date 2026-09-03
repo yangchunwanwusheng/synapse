@@ -91,6 +91,12 @@ def probe_timeout(mode: str) -> dict:
     if mode == "subprocess":
         # 强杀后执行器立即恢复（一次性子进程，无状态损坏）
         rejected_while_draining = None
+        residual = {
+            "threads_during_drain": None,
+            "drain_join_wait_s": None,
+            "residual_alive_during_drain": None,
+            "residual_alive_after_join": None,
+        }
         recover_outcome, recover_detail = _run(ex, "final_answer('recovered')")
         recovery_semantics = "immediate"
     else:
@@ -98,9 +104,19 @@ def probe_timeout(mode: str) -> dict:
         # 旧线程自然结束后 inner 重建（缓存 tools replay），恢复服务
         drain_outcome, _ = _run(ex, "final_answer('rejected-while-draining')")
         rejected_while_draining = drain_outcome == "draining"
+        # 复审 P2-2：残留线程必须在 join **前**快照，否则该事实结构性不可见
         stale = getattr(ex, "stale_thread", None)
+        residual = {
+            "threads_during_drain": threading.active_count(),
+            "drain_join_wait_s": None,
+            "residual_alive_during_drain": bool(stale is not None and stale.is_alive()),
+            "residual_alive_after_join": None,
+        }
         if stale is not None:
+            t0j = time.monotonic()
             stale.join(timeout=SLEEP + 10)
+            residual["drain_join_wait_s"] = round(time.monotonic() - t0j, 2)
+            residual["residual_alive_after_join"] = stale.is_alive()
         recover_outcome, recover_detail = _run(ex, "final_answer('recovered')")
         recovery_semantics = "rebuild-after-drain"
     return {
@@ -114,6 +130,7 @@ def probe_timeout(mode: str) -> dict:
         "threads_after": threading.active_count(),
         "threads_leaked": threading.active_count() > threads_before,
         "rejected_while_draining": rejected_while_draining,
+        "residual_thread": residual,
         "recovery_semantics": recovery_semantics,
         "recovered_after_timeout": recover_outcome == "ok" and recover_detail == "'recovered'",
     }
@@ -196,14 +213,20 @@ def build_report(results: dict) -> str:
         "",
         "## T1 超时回收（timeout=%ds，恶意 sleep=%ds）" % (T_LIMIT, SLEEP),
         "",
-        "| 档位 | 结果 | 调用方 wall | 超时后仍被阻塞 | 残留线程 | draining 拒绝 | 超时后可恢复 | 恢复语义 |",
+        "| 档位 | 结果 | 调用方 wall | 超时后仍被阻塞 | draining 期残留线程 | draining 拒绝 | 超时后可恢复 | 恢复语义 |",
         "|---|---|---|---|---|---|---|---|",
     ]
     for r in results["t1"]:
+        res = r.get("residual_thread") or {}
+        if r["mode"] == "local":
+            wait = res.get("drain_join_wait_s")
+            residual = f"是（≈{wait}s 后自然结束）" if res.get("residual_alive_during_drain") else "否（join 前已结束）"
+        else:
+            residual = "否（进程级强杀）"
         lines.append(
             f"| {r['mode']} | {r['outcome']} | {r['caller_wall_s']}s | "
             f"{'**是**' if r['caller_blocked_beyond_timeout'] else '否'} | "
-            f"{'是' if r['threads_leaked'] else '否'} | "
+            f"{residual} | "
             f"{'是' if r.get('rejected_while_draining') else 'N/A' if r['mode'] == 'subprocess' else '否'} | "
             f"{'是' if r['recovered_after_timeout'] else '否'} | {r['recovery_semantics']} |"
         )

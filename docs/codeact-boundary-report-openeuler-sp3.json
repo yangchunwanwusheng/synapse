@@ -1,5 +1,5 @@
 {
-  "generated_at": "2026-09-03T02:43:49+0000",
+  "generated_at": "2026-09-03T03:14:20+0000",
   "env": {
     "platform": "Linux-6.6.87.2-microsoft-standard-WSL2-x86_64-with-glibc2.38",
     "python": "3.11.6",
@@ -18,6 +18,12 @@
       "threads_after": 1,
       "threads_leaked": false,
       "rejected_while_draining": true,
+      "residual_thread": {
+        "threads_during_drain": 2,
+        "drain_join_wait_s": 4.0,
+        "residual_alive_during_drain": true,
+        "residual_alive_after_join": false
+      },
       "recovery_semantics": "rebuild-after-drain",
       "recovered_after_timeout": true
     },
@@ -32,6 +38,12 @@
       "threads_after": 1,
       "threads_leaked": false,
       "rejected_while_draining": null,
+      "residual_thread": {
+        "threads_during_drain": null,
+        "drain_join_wait_s": null,
+        "residual_alive_during_drain": null,
+        "residual_alive_after_join": null
+      },
       "recovery_semantics": "immediate",
       "recovered_after_timeout": true
     }
@@ -100,7 +112,7 @@
     "mode": "local",
     "open_builtin": {
       "outcome": "blocked",
-      "detail": "Code execution failed at line 'f = open('/tmp/synapse-boundary-pyjprfqv')' due to: InterpreterError:"
+      "detail": "Code execution failed at line 'f = open('/tmp/synapse-boundary-s5rq0u_9')' due to: InterpreterError:"
     },
     "dunder_import": {
       "outcome": "blocked",
@@ -112,7 +124,7 @@
     "mode": "subprocess",
     "open_builtin": {
       "outcome": "blocked",
-      "detail": "InterpreterError: Code execution failed at line 'f = open('/tmp/synapse-boundary-pyjprfqv')' due to:"
+      "detail": "InterpreterError: Code execution failed at line 'f = open('/tmp/synapse-boundary-s5rq0u_9')' due to:"
     },
     "dunder_import": {
       "outcome": "blocked",
@@ -127,7 +139,7 @@
     "alloc_mb": 1024,
     "outcome": "ok",
     "detail": "1073741824",
-    "caller_wall_s": 0.59,
+    "caller_wall_s": 0.56,
     "enforced": false
   },
   "t4_subprocess": {

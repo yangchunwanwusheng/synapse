@@ -21,19 +21,19 @@ class ExecOutcome:
     metric: int | None  # None=计算不可用（降级）；严格非 0 哨兵
     status: str  # "ok" | "degraded"
     retries: int  # 外层额外尝试次数（首次成功=0；不含 smolagents agent 内部 step 重试）
-    failure_kind: str | None  # "exception" | "type_contract" | None
+    failure_kind: str | None  # "exception" | "type_contract" | "non_int_final_answer" | "mixed" | None
 
     def as_dict(self) -> dict:
         return asdict(self)
 
 
 def _as_contract_int(value) -> int | None:
-    """严格返回契约：type(value) is int（排除 bool/float/str）。
+    """严格返回契约：非负 int（type(value) is int，排除 bool/float/str/负值）。
 
     静默转换（"42"→42、5.0→5）会掩盖模型违反 final_answer 整数契约的事实，
     使契约测试名义通过而模型行为未修正——按契约失败计，触发重试/降级。
     """
-    return value if type(value) is int else None
+    return value if type(value) is int and value >= 0 else None
 
 
 def run_executor_with_retry(execu, task, evidence) -> tuple[ExecOutcome, str]:
@@ -59,9 +59,12 @@ def run_executor_with_retry(execu, task, evidence) -> tuple[ExecOutcome, str]:
             continue
         metric = _as_contract_int(res)
         if metric is None:
-            failures.append(f"attempt{attempt}: type_contract({type(res).__name__})")
-            if "type_contract" not in kinds:
-                kinds.append("type_contract")
+            # 复审 P2-1：str 通常是超时/步数耗尽后 smolagents provide_final_answer 的文本
+            # 兜底（agents.py:628-640），单列口径，不与真正的类型契约违反混标
+            kind = "non_int_final_answer" if isinstance(res, str) else "type_contract"
+            failures.append(f"attempt{attempt}: {kind}({type(res).__name__})")
+            if kind not in kinds:
+                kinds.append(kind)
             continue
         return ExecOutcome(metric=metric, status="ok", retries=attempt, failure_kind=None), ""
     return (
