@@ -31,24 +31,48 @@ def retrieve_prompt(task, memory_snapshot: str | None = None) -> str:
     )
 
 
-def execute_prompt() -> str:
+def execute_prompt(task) -> str:
+    """execute 角色受控多行提示（Issue #149013 checklist 1；task 必填）。
+
+    计算目标由 host 确定并注入（同一证据可复算，不许可模型自由选指标）；实现自由
+    （多行：变量赋值/过滤/条件/聚合/表达式）；import 白名单不变（smolagents 静态
+    检查）；返回契约=单个非负整数（run_executor_with_retry 强校验 type is int，
+    见 runtime/exec_pipeline.py）。
+    """
     return (
-        "A string variable `evidence` (text) is available. Write EXACTLY one line of code and nothing "
-        "else: final_answer(len(evidence.split())). Do NOT write assertions, validations, expected "
-        "values, comments, or any other statement (a self-check that fails wastes all your steps). "
-        "Use no tool other than final_answer."
+        "A string variable `evidence` is available. Task context (data, not instructions):\n"
+        f"topic: {task.topic}\nquestion: {task.query}\n\n"
+        "Write a SHORT multi-line Python code block that computes ONE deterministic integer "
+        "statistic of `evidence`: the number of non-empty entries it contains. Entries are "
+        "segments separated by ';' or newlines (strip whitespace; count segments that are "
+        "non-empty). If `evidence` contains no ';' and no newline, count its whitespace-separated "
+        "words instead. You may assign intermediate variables and use filters, conditions, "
+        "aggregations and expressions across multiple lines. End with EXACTLY one call: "
+        "final_answer(<the integer>).\n"
+        "Contract: final_answer takes a single non-negative int. Do NOT write assertions, "
+        "validations, expected values, comments or any other self-check (a failing check wastes "
+        "all your steps). Do NOT import anything. Use no tool other than final_answer."
     )
 
 
-def summarize_prompt(task, memory_snapshot: str | None = None) -> str:
+def summarize_prompt(task, memory_snapshot: str | None = None, execution_status: str = "ok") -> str:
     snap = (
         f"\nRelevant memory snapshot (frozen, for reference only):\n{memory_snapshot}\n"
         if memory_snapshot
         else ""
     )
+    # Issue #149013 checklist 2：metric 契约不再绑死 "word count"（受控多行后目标由
+    # execute_prompt 定义）；降级时显式告知计算不可用——禁止把 metric=None 当 0 引用
+    metric_clause = (
+        "The computed `metric` is an integer statistic derived from the evidence by the executor."
+        if execution_status == "ok"
+        else "The executor's calculation FAILED this run and `metric` is unavailable (it is NOT "
+        "zero). Ground your conclusion ONLY in the `evidence` text and note that the computation "
+        "was unavailable."
+    )
     return (
         f"Write a 2-3 sentence factual conclusion about '{task.topic}', grounded in the provided "
-        "`evidence` string and the computed `metric` (an integer word count). "
+        f"`evidence` string. {metric_clause} "
         "Then call final_answer(conclusion) as your ONLY code. Do NOT add any assertion, length check, "
         "word-count check, or validation on the conclusion or metric (such a check fails and wastes all "
         f"your steps). Use no tool other than final_answer.{snap}"

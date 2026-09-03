@@ -34,6 +34,26 @@ def _balanced_final_call(s: str) -> str | None:
     return None
 
 
+def _longest_parsable_suffix_with_final(s: str) -> str | None:
+    """散文前缀 + 合法多行代码（含 final_answer）→ 恢复完整多行代码块（#149013）。
+
+    逐行尝试后缀 ast.parse，取最长且含 ``final_answer(`` 的可解析后缀；都不可解析
+    返回 None。修复单调用提取在多行场景的缺陷：``Thought: ..\\nresult = f(x)\\n
+    final_answer(result)`` 若只截取调用会丢变量赋值 → 执行必然 NameError。
+    """
+    lines = s.splitlines()
+    for i in range(len(lines)):
+        candidate = "\n".join(lines[i:]).strip()
+        if not candidate or "final_answer(" not in candidate:
+            continue
+        try:
+            ast.parse(candidate)
+            return candidate
+        except SyntaxError:
+            continue
+    return None
+
+
 def normalize_codeact(content: str) -> str:
     """Repair flaky small-model CodeAct so smolagents 1.26 can parse it.
 
@@ -67,8 +87,11 @@ def normalize_codeact(content: str) -> str:
     try:
         ast.parse(s)  # whole remainder is valid python
         code = s
-    except SyntaxError:  # prose around the call → keep just the balanced final_answer(...)
-        code = _balanced_final_call(s)
+    except SyntaxError:  # prose around the call → recover the longest parsable code suffix
+        # #149013：多行受控生成后，散文前缀+合法多行代码是高概率输出形态——
+        # 优先恢复完整多行块（含变量赋值）；不可恢复再退回单调用提取（宁可让
+        # 解析显式失败交给重试，也不执行缺变量赋值的必然 NameError 片段）
+        code = _longest_parsable_suffix_with_final(s) or _balanced_final_call(s)
         if code is None:
             return content  # unrecoverable → let smolagents raise as before
     return f"<code>\n{code}\n</code>"  # full pair: passes endswith check AND parse_code_blobs

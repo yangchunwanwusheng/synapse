@@ -55,6 +55,9 @@ class Metrics:
     embed_input_tokens: int = 0  # embedding API usage.prompt_tokens 累计（后端无 usage 时为 0）
     cas_writes: int = 0  # CAS put 次数（共享状态建立成本，cold）
     cas_write_bytes: int = 0  # CAS put 累计字节
+    # ---- #149013：execute 生成失败重试/降级显式计量（"0 静默"禁令的可观测面）----
+    exec_retries: int = 0  # 应用层 execu.run() 额外尝试次数（不含 smolagents agent 内部 step 重试）
+    exec_degradations: int = 0  # 重试预算耗尽后显式降级次数（metric=None，非 0 哨兵）
 
     @property
     def llm_total_tokens(self) -> int:

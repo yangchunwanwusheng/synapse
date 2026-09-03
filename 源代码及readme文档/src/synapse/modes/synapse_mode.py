@@ -32,7 +32,8 @@ from ..memory.retrieval import HybridRetriever
 from ..memory.tom import ToMPredictor
 from ..memory.consolidate import Consolidator
 from ..eval.metrics import Metrics, embedder_stats
-from ..prompts import plan_prompt, retrieve_prompt, execute_prompt, summarize_prompt
+from ..prompts import plan_prompt, retrieve_prompt, summarize_prompt
+from ..runtime.exec_pipeline import run_executor_with_retry
 
 
 def _valid_content_digest(cd) -> bool:
@@ -193,10 +194,11 @@ class SynapseSession:
                     )
                 )
 
-        # 执行（真·CodeAct，结构化结果）；§2.3 result 超预算则 spill 到 CAS 句柄 + 短摘要
-
-        exec_res = execu.run(execute_prompt(), reset=True, additional_args={"evidence": evidence})
-        exec_result, spill_handles = spill_result({"metric": exec_res}, self.cas)
+        # 执行（真·CodeAct，受控多行 + 重试/显式降级 #149013）；§2.3 result 超预算则 spill 到 CAS 句柄 + 短摘要
+        outcome, exec_failures = run_executor_with_retry(execu, task, evidence)
+        m.exec_retries += outcome.retries
+        m.exec_degradations += 1 if outcome.status == "degraded" else 0
+        exec_result, spill_handles = spill_result(outcome.as_dict(), self.cas)
         sched.send(
             Message(
                 sched.next_msg_id(),
@@ -205,14 +207,22 @@ class SynapseSession:
                 ActionType.EXECUTE.value,
                 result=exec_result,
                 handles=spill_handles,
-                meta={"spilled": bool(spill_handles)},
+                meta={
+                    "spilled": bool(spill_handles),
+                    "degraded": outcome.status == "degraded",
+                    "exec_failure": exec_failures[:200] if exec_failures else None,
+                },
             )
         )
         # 使用环（§13.2）：总结器用接收方已取回的证据正文 + 计算结果出结论（复用同一冻结快照）
         conclusion = summ.run(
-            summarize_prompt(task, memory_snapshot),
+            summarize_prompt(task, memory_snapshot, execution_status=outcome.status),
             reset=True,
-            additional_args={"evidence": recv_text, "metric": exec_res},
+            additional_args={
+                "evidence": recv_text,
+                "metric": outcome.metric,
+                "execution_status": outcome.status,
+            },
         )
 
         # 写回高价值记忆（供后续任务复用 → 非文本字节更省）
@@ -259,6 +269,7 @@ class SynapseSession:
         return {
             "metrics": m,
             "conclusion": conclusion,
+            "execution_status": outcome.status,
             "nnz": nnz,
             "checksum_ok": ok,
             # 真通路补充口径：checksum_ok=首帧 L1+L2 是否通过；final_recovery_ok=最终是否恢复成功

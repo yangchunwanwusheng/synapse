@@ -9,11 +9,12 @@ from __future__ import annotations
 import time
 
 from ..runtime.team import build_team
+from ..runtime.exec_pipeline import run_executor_with_retry
 from ..protocol.messages import Message, ActionType
 from ..protocol.handshake import CNR
 from ..protocol.scheduler import Scheduler
 from ..eval.metrics import Metrics
-from ..prompts import plan_prompt, retrieve_prompt, execute_prompt, summarize_prompt
+from ..prompts import plan_prompt, retrieve_prompt, summarize_prompt
 
 
 def run_text(task, cfg, team=None) -> dict:
@@ -45,18 +46,21 @@ def run_text(task, cfg, team=None) -> dict:
         )
     )
 
-    # 检索证据 → 执行器同源消费（真·CodeAct）→ 结果回传
+    # 检索证据 → 执行器同源消费（真·CodeAct，受控多行 + 重试/显式降级 #149013）→ 结果回传
     evidence = retr.run(retrieve_prompt(task), reset=True)
-    exec_res = execu.run(execute_prompt(), reset=True, additional_args={"evidence": evidence})
+    outcome, exec_failures = run_executor_with_retry(execu, task, evidence)
+    m.exec_retries += outcome.retries
+    m.exec_degradations += 1 if outcome.status == "degraded" else 0
     sched.send(
         Message(
             sched.next_msg_id(),
             execu.agent_id,
             summ.agent_id,
             ActionType.EXECUTE.value,
-            result={"metric": exec_res},
+            result=outcome.as_dict(),
             payload_kind="text",
-            text=f"exec_result={exec_res}",
+            text=f"exec_result={outcome.metric} status={outcome.status}"
+            + (f" failures={exec_failures[:160]}" if exec_failures else ""),
         )
     )
     # 证据全量文本透传给总结器（基线冗余来源；synapse 模式此处改走残差）
@@ -72,7 +76,9 @@ def run_text(task, cfg, team=None) -> dict:
     )
     # 使用环：text 基线下证据以全量文本透传到总结器（线缆冗余来源），总结器据此 + metric 出结论
     conclusion = summ.run(
-        summarize_prompt(task), reset=True, additional_args={"evidence": evidence, "metric": exec_res}
+        summarize_prompt(task, execution_status=outcome.status),
+        reset=True,
+        additional_args={"evidence": evidence, "metric": outcome.metric, "execution_status": outcome.status},
     )
 
     m.latency_s = time.perf_counter() - t0
@@ -81,4 +87,4 @@ def run_text(task, cfg, team=None) -> dict:
     m.llm_input_tokens = ti - ti0
     m.llm_output_tokens = to - to0
     m.quality = 1.0 if conclusion else 0.0
-    return {"metrics": m, "conclusion": conclusion}
+    return {"metrics": m, "conclusion": conclusion, "execution_status": outcome.status}
