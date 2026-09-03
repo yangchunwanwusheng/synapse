@@ -1,9 +1,11 @@
-"""CodeAct 执行边界测试（V3-08 / Issue #148750）。
+"""CodeAct 执行边界测试（V3-08 / Issue #148750；#149013 local 档超时回收）。
 
 覆盖：进程级隔离执行器（SubprocessExecutor）的核心承诺——final_answer 语义与进程内
 一致、state 跨步保持、import 白名单拦截、超时强杀（无泄漏线程）、子进程失败不炸父进程、
 非 final_answer 工具注入显式拒绝；CNR check_fn 真实探针（local/subprocess 两档）；
-Config 枚举校验；以及 CodeAgent(executor=SubprocessExecutor) 端到端真跑一段 CodeAct。
+Config 枚举校验；CodeAgent(executor=SubprocessExecutor) 端到端真跑一段 CodeAct；
+TimeoutLocalExecutor（#149013）——调用方 deadline 返回（wall≈timeout）、超时 state
+隔离与重建、draining 拒绝、并发拒绝、cleanup 语义。
 """
 
 from __future__ import annotations
@@ -16,6 +18,11 @@ import pytest
 smolagents_local = pytest.importorskip("smolagents.local_python_executor")
 
 from synapse.config import Config, ConfigError  # noqa: E402
+from synapse.runtime.local_executor import (  # noqa: E402
+    ExecutionTimeoutError,
+    ExecutorDrainingError,
+    TimeoutLocalExecutor,
+)
 from synapse.runtime.subprocess_executor import SubprocessExecutor  # noqa: E402
 
 
@@ -231,4 +238,148 @@ def test_codeagent_end_to_end_with_subprocess_executor():
     )
     result = agent.run("count words", additional_args={"evidence": "w1 w2 w3 w4"})
     # executor 角色 CodeAct：result = len(evidence.split()) → 4（来自隔离子进程的真实求值）
+    assert int(result) == 4
+
+
+# ---------------- TimeoutLocalExecutor（Issue #149013：local 档调用方 deadline 超时） ----------------
+
+
+def test_timeout_local_executor_final_answer_roundtrip():
+    ex = TimeoutLocalExecutor(timeout_seconds=30)
+    ex.send_tools(_fa())
+    out = ex("x = 40 + 2\nfinal_answer(x)")
+    assert out.is_final_answer is True
+    assert out.output == 42
+
+
+def test_timeout_local_executor_state_persists_across_steps():
+    """与 subprocess 档同语义：step 间 state 保持（正常路径复用同一 inner）。"""
+    ex = TimeoutLocalExecutor(timeout_seconds=30)
+    ex.send_tools(_fa())
+    ex.send_variables({"evidence": "alpha beta gamma"})
+    out = ex("n = len(evidence.split())\nfinal_answer(n)")
+    assert out.output == 3
+    out2 = ex("final_answer(n * 10)")
+    assert out2.output == 30
+
+
+def test_timeout_local_executor_blocks_unauthorized_imports():
+    ex = TimeoutLocalExecutor(timeout_seconds=30)
+    ex.send_tools(_fa())
+    with pytest.raises(Exception, match=r"(?i)not (?:allowed|authorized)|authorized import"):
+        ex("import subprocess")
+
+
+def test_timeout_local_executor_wall_approximates_timeout():
+    """T1 修复核心断言：调用方 wall≈timeout（旧 bug：join 至代码自然结束 wall≈sleep）。"""
+    ex = TimeoutLocalExecutor(timeout_seconds=2)
+    ex.send_tools(_fa())
+    t0 = time.monotonic()
+    with pytest.raises(ExecutionTimeoutError, match="maximum execution time"):
+        ex("import time as _t\n_t.sleep(6)\nfinal_answer('slept')")
+    wall = time.monotonic() - t0
+    assert wall >= 2 - 0.3, f"不得早于 deadline 返回，实际 {wall:.2f}s"
+    # 上界 5s 能区分修复前（wall≈6s，sleep 自然结束）与修复后（wall≈2s）；
+    # Windows 调度抖动余量 3s 实测充足
+    assert wall < 5, f"调用方应在 deadline 附近返回，实际 {wall:.2f}s（旧 bug ≈6s）"
+
+
+def test_timeout_local_executor_poisons_state_and_rejects_while_draining():
+    """复审 P0：超时 inner 作废——旧线程存活期间拒绝新执行，不得复用被污染 state。"""
+    ex = TimeoutLocalExecutor(timeout_seconds=2)
+    ex.send_tools(_fa())
+    with pytest.raises(ExecutionTimeoutError):
+        ex("import time as _t\n_t.sleep(6)\nfinal_answer('slept')")
+    # 旧线程（sleep 6s）仍存活：新调用显式拒绝（ExecutorDrainingError），而非静默并发
+    with pytest.raises(ExecutorDrainingError, match="still running"):
+        ex("final_answer('should be rejected')")
+    # 旧线程自然结束后：丢弃旧 state 重建干净 inner，缓存 tools replay，恢复服务
+    if ex._stale_thread is not None:
+        ex._stale_thread.join(timeout=15)
+    out = ex("final_answer('recovered')")
+    assert out.output == "recovered"
+    # 旧代码的迟到赋值（marker='stale'）不得泄漏进新 inner（state 隔离）
+    with pytest.raises(Exception, match="(?i)not defined"):
+        ex("final_answer(marker)")
+
+
+def test_timeout_local_executor_delayed_write_does_not_pollute_new_inner():
+    """复审 P0 延迟污染场景：旧代码迟到写入不得进入重建后的 inner。"""
+    ex = TimeoutLocalExecutor(timeout_seconds=2)
+    ex.send_tools(_fa())
+    with pytest.raises(ExecutionTimeoutError):
+        ex("import time as _t\n_t.sleep(4)\nmarker = 'stale'\nfinal_answer(marker)")
+    if ex._stale_thread is not None:
+        ex._stale_thread.join(timeout=15)
+    # 若旧线程迟到赋值污染了新 inner，marker='stale' 可达 → final_answer 成功 → 本断言失败
+    with pytest.raises(Exception, match="(?i)not defined"):
+        ex("final_answer(marker)")
+    # 重建后的实例重新可超时（状态机可循环，线程数有界：每次至多 1 个残留）
+    with pytest.raises(ExecutionTimeoutError):
+        ex("import time as _t\n_t.sleep(4)\nfinal_answer('again')")
+
+
+def test_timeout_local_executor_rejects_concurrent_calls():
+    ex = TimeoutLocalExecutor(timeout_seconds=30)
+    ex.send_tools(_fa())
+    holder = {}
+
+    def _occupy():
+        try:
+            ex("import time as _t\n_t.sleep(1)\nfinal_answer('occupied')")
+        except Exception as e:  # noqa: BLE001
+            holder["err"] = e
+
+    occupier = threading.Thread(target=_occupy)
+    occupier.start()
+    time.sleep(0.3)  # 等 occupier 进入执行
+    # 并行 __call__ 显式拒绝（实例不支持并发；正常流水线为顺序调用）
+    with pytest.raises(ExecutorDrainingError, match="concurrent"):
+        ex("final_answer('parallel')")
+    occupier.join(timeout=15)
+    assert holder.get("err") is None  # 占用者正常完成
+
+
+def test_timeout_local_executor_cleanup_blocks_further_calls():
+    ex = TimeoutLocalExecutor(timeout_seconds=30)
+    ex.send_tools(_fa())
+    ex.cleanup()  # CodeAgent.cleanup() 探测该方法；不强杀线程，只阻断后续调用
+    with pytest.raises(ExecutorDrainingError, match="closed"):
+        ex("final_answer('after cleanup')")
+
+
+def test_timeout_local_executor_state_property_diagnostic():
+    ex = TimeoutLocalExecutor(timeout_seconds=30)
+    ex.send_tools(_fa())
+    ex("x = 1")
+    assert "_print_outputs" in ex.state  # CodeAgent 异常诊断路径依赖该键（agents.py:1735）
+
+
+def test_build_team_wires_timeout_local_executor_by_default():
+    """#149013：local 档默认注入 TimeoutLocalExecutor（4 角色全部，独立实例）。"""
+    from synapse.runtime.team import build_team
+
+    team = build_team(Config())
+    execs = [ag.python_executor for ag in team.agents()]
+    assert all(isinstance(ex, TimeoutLocalExecutor) for ex in execs)
+    assert len({id(ex) for ex in execs}) == 4  # 复审 P1-1：跨 Agent 不得共享
+    assert all(ex.timeout_seconds == Config().codeact_timeout_s for ex in execs)
+
+
+def test_codeagent_end_to_end_with_timeout_local_executor():
+    """端到端：默认 local 档执行路径（TimeoutLocalExecutor）真跑 mock CodeAct。"""
+    from smolagents import CodeAgent
+
+    from synapse.runtime.model import MockChatModel
+
+    agent = CodeAgent(
+        tools=[],
+        model=MockChatModel(role="executor", n_facts=4),
+        name="executor_1",
+        max_steps=3,
+        verbosity_level=0,
+        add_base_tools=False,
+        executor=TimeoutLocalExecutor(timeout_seconds=30),
+    )
+    result = agent.run("count words", additional_args={"evidence": "w1 w2 w3 w4"})
     assert int(result) == 4

@@ -54,11 +54,9 @@ class Config:
     qa_para_k: int = 3  # [HotpotQA] synapse 每题检索的相关段落数（10 段中只取 k，丢干扰段）
     qa_retrieval: str = "single"  # [HotpotQA] "single"=单跳问题检索 | "twohop"=两跳(用第一跳内容补检索桥接段)
 
-    # ---- CodeAct 执行器（V3-08 / Issue #148750：执行边界如实化）----
-    codeact_executor: str = "local"  # "local"=进程内受限解释器(smolagents 线程超时，历史口径) | "subprocess"=进程级隔离执行器(超时可强杀+POSIX 资源限制)；两模式同一 import 白名单与 state 语义
-    codeact_timeout_s: int = (
-        30  # subprocess 模式每步 wall-clock 上限（超时 kill；与 smolagents 默认 30s 对齐）
-    )
+    # ---- CodeAct 执行器（V3-08 / Issue #148750：执行边界如实化；#149013：超时语义统一）----
+    codeact_executor: str = "local"  # "local"=进程内受限解释器+调用方deadline超时(线程不可强杀,超时inner作废重建,#149013) | "subprocess"=进程级隔离执行器(超时可强杀+POSIX 资源限制)；两模式同一 import 白名单与 state 语义
+    codeact_timeout_s: int = 30  # 每步 wall-clock deadline（#149013 起两档统一生效；与 smolagents 默认 30s 对齐；subprocess 档为 kill 上限）
     codeact_memory_mb: int = 2048  # subprocess 模式 POSIX RLIMIT_AS 上限（Windows 无 resource 模块自动降级）
     codeact_cpu_s: int = 120  # subprocess 模式 POSIX RLIMIT_CPU 上限（CPU 秒）
 

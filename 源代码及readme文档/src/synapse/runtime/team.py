@@ -55,7 +55,7 @@ def _make_verify_check_fn(cfg=None):
     memo: dict[str, set[str]] = {}
 
     def _probe_executor() -> bool:
-        from smolagents.local_python_executor import LocalPythonExecutor
+        from synapse.runtime.local_executor import TimeoutLocalExecutor
 
         if cfg is not None and getattr(cfg, "codeact_executor", "local") == "subprocess":
             from .subprocess_executor import SubprocessExecutor
@@ -66,7 +66,12 @@ def _make_verify_check_fn(cfg=None):
                 cpu_seconds=getattr(cfg, "codeact_cpu_s", 120),
             )  # 复审修正：探针带 cfg 资源限制（与该档真实执行路径同构，而非默认 rlimit）
         else:
-            ex = LocalPythonExecutor(additional_authorized_imports=[])
+            # Issue #149013：local 档探针与真实执行路径同构（TimeoutLocalExecutor），
+            # 不再直接用 smolagents LocalPythonExecutor（其库内线程池超时有 with-join 阻塞）
+            ex = TimeoutLocalExecutor(
+                additional_authorized_imports=[],
+                timeout_seconds=getattr(cfg, "codeact_timeout_s", 30),
+            )
         ex.send_tools({"final_answer": lambda *a: a[0] if len(a) == 1 else (a or None)})
         out = ex("final_answer(2 ** 10)")
         return bool(out.is_final_answer) and out.output == 1024
@@ -121,14 +126,18 @@ def build_team(cfg) -> Team:
     """构造 4 角色 smolagents 团队（同配置后端）。
 
     V3-08：codeact_executor="subprocess" 时注入进程级隔离执行器（超时可强杀 + POSIX
-    资源限制）；默认 "local" 保持进程内受限解释器（历史口径，零回归）。
+    资源限制）。Issue #149013：local 档默认注入 TimeoutLocalExecutor（进程内受限
+    解释器 + 调用方 deadline 超时——smolagents 自建执行器的库内线程池超时会 join 至
+    失控代码自然结束，wall≫timeout）；默认 30s 与 smolagents 内部默认一致，超时值
+    无漂移，codeact_timeout_s 现对两档统一生效。
 
-    复审 P1-1 修正：**每 Agent 独立 executor 实例**（与 local 档每 CodeAgent 各自
-    create_python_executor 的隔离语义对齐）——共享实例会让一个角色的 CodeAct 变量
+    复审 P1-1 修正：**每 Agent 独立 executor 实例**（含 4 角色全部注入——planner/
+    retriever/summarizer 也执行 final_answer CodeAct），与 local 档每 CodeAgent 各自
+    create_python_executor 的隔离语义对齐——共享实例会让一个角色的 CodeAct 变量
     残留进其他角色的 state（跨 Agent 串扰，已实测复现并补隔离测试）。
     注意：注入自定义 executor 时 CodeAgent 的 additional_authorized_imports /
-    max_print_outputs_length 参数不被消费（smolagents 仅在自建路径读取）；当前
-    两档均取默认值（[]/None→50000），语义一致。
+    max_print_outputs_length 参数不被消费（smolagents 仅在自建路径读取）；两档均
+    显式接收默认值（[]/None→50000），语义一致。
     """
     use_subprocess = getattr(cfg, "codeact_executor", "local") == "subprocess"
     agents: dict[str, CodeAgent] = {}
@@ -142,6 +151,13 @@ def build_team(cfg) -> Team:
                 timeout_seconds=cfg.codeact_timeout_s,
                 memory_limit_mb=cfg.codeact_memory_mb,
                 cpu_seconds=cfg.codeact_cpu_s,
+            )
+        else:
+            from .local_executor import TimeoutLocalExecutor
+
+            executor = TimeoutLocalExecutor(
+                additional_authorized_imports=[],
+                timeout_seconds=cfg.codeact_timeout_s,
             )
         agent = CodeAgent(
             tools=[],
