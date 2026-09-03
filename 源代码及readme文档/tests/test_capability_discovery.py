@@ -111,7 +111,7 @@ def test_fresh_view_populated_only_by_accepted_replies():
     r_exec = CNR.handle_query(q_exec, cap_exec, "r1")
     fresh2.observe(CNR.accept_reply(r_exec, q_exec))  # 只消费 executor 的响应
     q_summ = CNR.make_query("newcomer-1", "summarizer-9", "q2")
-    r_summ = CNR.handle_query(q_summ, cap_summ, "r2")  # summarizer 响应被丢弃（未 accept）
+    CNR.handle_query(q_summ, cap_summ, "r2")  # summarizer 响应被丢弃（未 accept）
     assert fresh2.resolve(action="EXECUTE") == ("executor-1",)
     assert fresh2.resolve(action="SUMMARIZE") == ()  # 丢响应 → 不可路由（不静默回退）
     # 按响应路由（编码面）：未观察到的一端 negotiate 走 text 兜底
