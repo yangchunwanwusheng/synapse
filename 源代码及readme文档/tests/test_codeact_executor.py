@@ -294,8 +294,8 @@ def test_timeout_local_executor_poisons_state_and_rejects_while_draining():
     with pytest.raises(ExecutorDrainingError, match="still running"):
         ex("final_answer('should be rejected')")
     # 旧线程自然结束后：丢弃旧 state 重建干净 inner，缓存 tools replay，恢复服务
-    if ex._stale_thread is not None:
-        ex._stale_thread.join(timeout=15)
+    if ex.stale_thread is not None:
+        ex.stale_thread.join(timeout=15)
     out = ex("final_answer('recovered')")
     assert out.output == "recovered"
     # 旧代码的迟到赋值（marker='stale'）不得泄漏进新 inner（state 隔离）
@@ -309,8 +309,8 @@ def test_timeout_local_executor_delayed_write_does_not_pollute_new_inner():
     ex.send_tools(_fa())
     with pytest.raises(ExecutionTimeoutError):
         ex("import time as _t\n_t.sleep(4)\nmarker = 'stale'\nfinal_answer(marker)")
-    if ex._stale_thread is not None:
-        ex._stale_thread.join(timeout=15)
+    if ex.stale_thread is not None:
+        ex.stale_thread.join(timeout=15)
     # 若旧线程迟到赋值污染了新 inner，marker='stale' 可达 → final_answer 成功 → 本断言失败
     with pytest.raises(Exception, match="(?i)not defined"):
         ex("final_answer(marker)")

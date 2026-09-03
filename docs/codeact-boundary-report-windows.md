@@ -1,18 +1,19 @@
 # CodeAct 执行边界实测报告（探针自动生成）
 
-- 生成时间：2026-08-31 23:29:00 +0800
+- 生成时间：2026-09-03 10:41:43 +0800
 - 主机：Windows 10 AMD64 / Python 3.11.14
 - smolagents：1.26.0
 - 探针脚本：`scripts/codeact_boundary_probe.py`（离线、确定性、有界时长）
 
-## T1 超时强杀（timeout=2s，恶意 sleep=6s）
+## T1 超时回收（timeout=2s，恶意 sleep=6s）
 
-| 档位 | 结果 | 调用方 wall | 超时后仍被阻塞 | 线程泄漏 | 强杀后可恢复 |
-|---|---|---|---|---|---|
-| local | timeout | 6.0s | **是** | 否 | 是 |
-| subprocess | timeout | 2.03s | 否 | 否 | 是 |
+| 档位 | 结果 | 调用方 wall | 超时后仍被阻塞 | 残留线程 | draining 拒绝 | 超时后可恢复 | 恢复语义 |
+|---|---|---|---|---|---|---|---|
+| local | timeout | 2.0s | 否 | 否 | 是 | 是 | rebuild-after-drain |
+| subprocess | timeout | 2.02s | 否 | 否 | N/A | 是 | immediate |
 
-> local 档实测：`ExecutionTimeoutError` 在超时点抛出，但调用方被线程池 `shutdown(wait=True)` join 阻塞至代码自然结束（wall≈sleep 时长）——smolagents docstring 自述 *"the thread cannot be forcefully killed"* 的实测强化口径；`time.sleep(10**9)` 级代码将使 Agent 进程实质挂死。subprocess 档 wall≈timeout 即返回，父进程零残留线程且可继续服务。
+> local 档实测（#149013 修复后）：调用方 wall≈timeout 即返回（`ExecutionTimeoutError`），不再被库内线程池 `shutdown(wait=True)` join 至代码自然结束（修复前 wall≈sleep 时长，`time.sleep(10**9)` 级代码会使 Agent 进程实质挂死）。如实边界：Python 线程不可强杀——超时 inner 立即作废，旧线程存活期间新执行被显式拒绝（draining），旧线程自然结束后丢弃其 state 重建 inner 恢复服务；残留 daemon 线程如实计数，不阻塞进程退出。
+> subprocess 档实测：wall≈timeout 进程级强杀返回，父进程零残留线程且立即恢复（一次性子进程，无状态损坏）。
 
 ## T2 import 可达性（两档同一 smolagents 白名单）
 
@@ -40,13 +41,13 @@
 | local | Windows | N/A | N/A |
 | subprocess | Windows | N/A | N/A |
 
-## T5 崩溃遏制（子进程内除零 → 父进程存活）
+## T5 崩溃遏制（执行器内除零 → 执行器存活可继续服务）
 
-| 档位 | 父进程存活 |
+| 档位 | 执行器存活 |
 |---|---|
 | local | 是 |
 | subprocess | 是 |
 
 ---
 
-**结论（实测口径）**：local 档超时不可强杀且调用方被阻塞；subprocess 档实现超时进程级强杀、零线程残留、崩溃遏制与 POSIX 资源限制（Windows 降级为仅超时+强杀）。两档均非安全沙箱（同用户文件系统/网络未隔离，import 白名单为解释器层静态检查）。
+**结论（实测口径，#149013 更新）**：local 档实现调用方 deadline 超时（wall≈timeout 返回），超时 state 作废重建、draining 期显式拒绝；不提供强杀/无残留/立即恢复（Python 线程模型决定，如实声明）。subprocess 档实现超时进程级强杀、零线程残留、立即恢复、崩溃遏制与 POSIX 资源限制（Windows 降级为仅超时+强杀）。两档均非安全沙箱（同用户文件系统/网络未隔离，import 白名单为解释器层静态检查）。

@@ -1,5 +1,5 @@
 {
-  "generated_at": "2026-08-31T23:28:35+0800",
+  "generated_at": "2026-09-03T10:41:27+0800",
   "env": {
     "platform": "Windows-10-10.0.26200-SP0",
     "python": "3.11.14",
@@ -13,10 +13,12 @@
       "sleep_s": 6,
       "outcome": "timeout",
       "detail": "Code execution exceeded the maximum execution time of 2 seconds",
-      "caller_wall_s": 6.0,
-      "caller_blocked_beyond_timeout": true,
+      "caller_wall_s": 2.0,
+      "caller_blocked_beyond_timeout": false,
       "threads_after": 1,
       "threads_leaked": false,
+      "rejected_while_draining": true,
+      "recovery_semantics": "rebuild-after-drain",
       "recovered_after_timeout": true
     },
     {
@@ -25,10 +27,12 @@
       "sleep_s": 6,
       "outcome": "timeout",
       "detail": "Code execution exceeded the maximum execution time of 2 seconds (subprocess killed)",
-      "caller_wall_s": 2.03,
+      "caller_wall_s": 2.02,
       "caller_blocked_beyond_timeout": false,
       "threads_after": 1,
       "threads_leaked": false,
+      "rejected_while_draining": null,
+      "recovery_semantics": "immediate",
       "recovered_after_timeout": true
     }
   ],
@@ -96,7 +100,7 @@
     "mode": "local",
     "open_builtin": {
       "outcome": "blocked",
-      "detail": "Code execution failed at line 'f = open('C:\\\\Users\\\\oobbee\\\\AppData\\\\Local\\\\Temp\\\\synapse-boundary-n"
+      "detail": "Code execution failed at line 'f = open('C:\\\\Users\\\\oobbee\\\\AppData\\\\Local\\\\Temp\\\\synapse-boundary-r"
     },
     "dunder_import": {
       "outcome": "blocked",

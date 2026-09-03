@@ -1,22 +1,26 @@
-"""CodeAct 执行边界实测探针（V3-08 / Issue #148750）。
+"""CodeAct 执行边界实测探针（V3-08 / Issue #148750；#149013 local 档超时语义更新）。
 
-对 local（进程内受限解释器，默认档）与 subprocess（进程级隔离执行器，V3-08 新增）各跑
-同一组边界探针，输出 JSON 结果与 Markdown 报告。探针全部离线、确定性、有界时长。
+对 local（进程内受限解释器+调用方 deadline 超时，默认档）与 subprocess（进程级
+隔离执行器）各跑同一组边界探针，输出 JSON 结果与 Markdown 报告。探针全部离线、
+确定性、有界时长。
 
 探针组（结果只记录实测事实，解释见 docs/工程化基线.md §CodeAct）：
 
-  T1 timeout-kill   ：time.sleep(SLEEP) 配 timeout=T_LIMIT（SLEEP > T_LIMIT）
-                      local 预期：ExecutionTimeoutError 抛出，但调用方被线程池 shutdown
-                      (wait=True) 阻塞至 sleep 自然结束（wall ≈ SLEEP，实测口径）
+  T1 超时回收       ：time.sleep(SLEEP) 配 timeout=T_LIMIT（SLEEP > T_LIMIT）
+                      local 预期（#149013 修复后）：调用方 wall≈T_LIMIT 即返回
+                      （ExecutionTimeoutError）；Python 线程不可强杀——draining 期
+                      新执行被显式拒绝，旧线程自然结束后 inner 重建、恢复服务
+                      （残留 daemon 线程如实计数）；修复前实测：库内线程池
+                      shutdown(wait=True) 将调用方 join 阻塞至 wall≈SLEEP
                       subprocess 预期：T_LIMIT 即进程级强杀（wall ≈ T_LIMIT），父进程
-                      零残留线程，且执行器下一步仍可服务
+                      零残留线程，且执行器下一步立即恢复
   T2 import 可达性  ：逐个 import subprocess/socket/os/shutil/math（两档同一 smolagents
                       白名单，预期 math 允许、其余静态拒绝）
   T3 文件系统可达性 ：open() 读系统临时目录 marker 文件（预期两档均被禁用 builtin 拦截——
                       解释器层防线，非 OS 级；同用户文件系统权限未隔离，如实记录）
   T4 资源限制       ：subprocess 档 POSIX RLIMIT_AS 上限下过量分配 → MemoryError/强杀；
                       local 档无资源限制（对照）；Windows 无 resource 模块记 N/A
-  T5 崩溃遏制       ：subprocess 档子进程内失败（除零）后父进程存活且可继续服务
+  T5 崩溃遏制       ：执行器内失败（除零）后执行器存活且可继续服务
 
 用法：
   uv run --no-sync python scripts/codeact_boundary_probe.py            # 打印 Markdown
@@ -38,7 +42,7 @@ from pathlib import Path
 sys.path.insert(0, str(Path(__file__).resolve().parents[1] / "src"))
 
 T_LIMIT = 2  # T1 超时上限（秒）
-SLEEP = 6  # T1 恶意代码时长（秒）> T_LIMIT：local 档 wall≈SLEEP 即证明"超时后仍被阻塞"
+SLEEP = 6  # T1 恶意代码时长（秒）> T_LIMIT：local 档修复前 wall≈SLEEP 即"join 阻塞"证据
 MEM_LIMIT_MB = 512  # T4 subprocess 档 RLIMIT_AS
 ALLOC_MB = 1024  # T4 恶意分配量（> MEM_LIMIT_MB）；经 "x"*N 字符串重复构造
 # （bytearray(list) 大分配构造器属 smolagents 静态 Forbidden function，测不到 OS 级限制）
@@ -50,16 +54,18 @@ def _fa():
 
 def _mk(mode: str, **kw):
     if mode == "local":
-        from smolagents.local_python_executor import LocalPythonExecutor
+        # #149013：local 档与真实执行路径同构（TimeoutLocalExecutor），不再直接用
+        # smolagents LocalPythonExecutor（其库内线程池超时有 with-join 阻塞）
+        from synapse.runtime.local_executor import TimeoutLocalExecutor
 
-        return LocalPythonExecutor(additional_authorized_imports=[], **kw)
+        return TimeoutLocalExecutor(timeout_seconds=kw.get("timeout_seconds", 30))
     from synapse.runtime.subprocess_executor import SubprocessExecutor
 
     return SubprocessExecutor(**kw)
 
 
 def _run(ex, code: str):
-    """单次求值：返回 (outcome, detail)。outcome ∈ ok | blocked | timeout | error。"""
+    """单次求值：返回 (outcome, detail)。outcome ∈ ok | blocked | timeout | draining | error。"""
     try:
         out = ex(code)
         return "ok", repr(out.output)[:120]
@@ -67,6 +73,8 @@ def _run(ex, code: str):
         msg = str(e)
         if "maximum execution time" in msg:
             return "timeout", msg[:160]
+        if "still running" in msg or "concurrent call" in msg or "closed" in msg:
+            return "draining", msg[:160]
         if "not allowed" in msg or "Forbidden" in msg or "not defined" in msg or "failed at line" in msg:
             return "blocked", msg[:160]
         return "error", msg[:160]
@@ -80,8 +88,21 @@ def probe_timeout(mode: str) -> dict:
     t0 = time.monotonic()
     outcome, detail = _run(ex, code)
     wall = round(time.monotonic() - t0, 2)
-    # 强杀后执行器是否仍可服务（崩溃遏制 + 无状态损坏）
-    recover_outcome, recover_detail = _run(ex, "final_answer('recovered')")
+    if mode == "subprocess":
+        # 强杀后执行器立即恢复（一次性子进程，无状态损坏）
+        rejected_while_draining = None
+        recover_outcome, recover_detail = _run(ex, "final_answer('recovered')")
+        recovery_semantics = "immediate"
+    else:
+        # local 档（#149013）：线程不可强杀——draining 期新执行显式拒绝；
+        # 旧线程自然结束后 inner 重建（缓存 tools replay），恢复服务
+        drain_outcome, _ = _run(ex, "final_answer('rejected-while-draining')")
+        rejected_while_draining = drain_outcome == "draining"
+        stale = getattr(ex, "stale_thread", None)
+        if stale is not None:
+            stale.join(timeout=SLEEP + 10)
+        recover_outcome, recover_detail = _run(ex, "final_answer('recovered')")
+        recovery_semantics = "rebuild-after-drain"
     return {
         "mode": mode,
         "timeout_s": T_LIMIT,
@@ -92,6 +113,8 @@ def probe_timeout(mode: str) -> dict:
         "caller_blocked_beyond_timeout": wall >= SLEEP - 0.5,
         "threads_after": threading.active_count(),
         "threads_leaked": threading.active_count() > threads_before,
+        "rejected_while_draining": rejected_while_draining,
+        "recovery_semantics": recovery_semantics,
         "recovered_after_timeout": recover_outcome == "ok" and recover_detail == "'recovered'",
     }
 
@@ -171,25 +194,28 @@ def build_report(results: dict) -> str:
         f"- smolagents：{results['env']['smolagents_version']}",
         "- 探针脚本：`scripts/codeact_boundary_probe.py`（离线、确定性、有界时长）",
         "",
-        "## T1 超时强杀（timeout=%ds，恶意 sleep=%ds）" % (T_LIMIT, SLEEP),
+        "## T1 超时回收（timeout=%ds，恶意 sleep=%ds）" % (T_LIMIT, SLEEP),
         "",
-        "| 档位 | 结果 | 调用方 wall | 超时后仍被阻塞 | 线程泄漏 | 强杀后可恢复 |",
-        "|---|---|---|---|---|---|",
+        "| 档位 | 结果 | 调用方 wall | 超时后仍被阻塞 | 残留线程 | draining 拒绝 | 超时后可恢复 | 恢复语义 |",
+        "|---|---|---|---|---|---|---|---|",
     ]
     for r in results["t1"]:
         lines.append(
             f"| {r['mode']} | {r['outcome']} | {r['caller_wall_s']}s | "
             f"{'**是**' if r['caller_blocked_beyond_timeout'] else '否'} | "
             f"{'是' if r['threads_leaked'] else '否'} | "
-            f"{'是' if r['recovered_after_timeout'] else '否'} |"
+            f"{'是' if r.get('rejected_while_draining') else 'N/A' if r['mode'] == 'subprocess' else '否'} | "
+            f"{'是' if r['recovered_after_timeout'] else '否'} | {r['recovery_semantics']} |"
         )
     lines += [
         "",
-        "> local 档实测：`ExecutionTimeoutError` 在超时点抛出，但调用方被线程池 "
-        "`shutdown(wait=True)` join 阻塞至代码自然结束（wall≈sleep 时长）——smolagents "
-        'docstring 自述 *"the thread cannot be forcefully killed"* 的实测强化口径；'
-        "`time.sleep(10**9)` 级代码将使 Agent 进程实质挂死。subprocess 档 wall≈timeout 即返回，"
-        "父进程零残留线程且可继续服务。",
+        "> local 档实测（#149013 修复后）：调用方 wall≈timeout 即返回（`ExecutionTimeoutError`），"
+        "不再被库内线程池 `shutdown(wait=True)` join 至代码自然结束（修复前 wall≈sleep 时长，"
+        "`time.sleep(10**9)` 级代码会使 Agent 进程实质挂死）。如实边界：Python 线程不可强杀——"
+        "超时 inner 立即作废，旧线程存活期间新执行被显式拒绝（draining），旧线程自然结束后丢弃"
+        "其 state 重建 inner 恢复服务；残留 daemon 线程如实计数，不阻塞进程退出。",
+        "> subprocess 档实测：wall≈timeout 进程级强杀返回，父进程零残留线程且立即恢复"
+        "（一次性子进程，无状态损坏）。",
         "",
         "## T2 import 可达性（两档同一 smolagents 白名单）",
         "",
@@ -232,9 +258,9 @@ def build_report(results: dict) -> str:
         lines.append(f"| {r['mode']} | {r['platform']} | {r['outcome']} | {enforced} |")
     lines += [
         "",
-        "## T5 崩溃遏制（子进程内除零 → 父进程存活）",
+        "## T5 崩溃遏制（执行器内除零 → 执行器存活可继续服务）",
         "",
-        "| 档位 | 父进程存活 |",
+        "| 档位 | 执行器存活 |",
         "|---|---|",
     ]
     for r in (results["t5_local"], results["t5_subprocess"]):
@@ -243,9 +269,11 @@ def build_report(results: dict) -> str:
         "",
         "---",
         "",
-        "**结论（实测口径）**：local 档超时不可强杀且调用方被阻塞；subprocess 档实现超时进程级强杀、"
-        "零线程残留、崩溃遏制与 POSIX 资源限制（Windows 降级为仅超时+强杀）。两档均非安全沙箱"
-        "（同用户文件系统/网络未隔离，import 白名单为解释器层静态检查）。",
+        "**结论（实测口径，#149013 更新）**：local 档实现调用方 deadline 超时（wall≈timeout 返回），"
+        "超时 state 作废重建、draining 期显式拒绝；不提供强杀/无残留/立即恢复（Python 线程模型决定，"
+        "如实声明）。subprocess 档实现超时进程级强杀、零线程残留、立即恢复、崩溃遏制与 POSIX 资源"
+        "限制（Windows 降级为仅超时+强杀）。两档均非安全沙箱（同用户文件系统/网络未隔离，"
+        "import 白名单为解释器层静态检查）。",
         "",
     ]
     return "\n".join(lines)
