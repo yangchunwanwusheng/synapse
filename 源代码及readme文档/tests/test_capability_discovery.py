@@ -63,7 +63,11 @@ def test_cold_start_discovery_directed_flow():
     accepted = sched.register(newcomer)
 
     assert set(accepted) == {"planner-1", "retriever-1", "executor-1"}
-    assert accepted["retriever-1"] == peers[1].cap
+    assert accepted["retriever-1"] == Capability(
+        agent_id="retriever-1", role="retriever",
+        actions=("RETRIEVE", "TELL"), encodings=("text", "embedding", "residual"),
+        model_family="mock-family",
+    )  # 字段级期望值（非 peers[1].cap 引用同对象恒真；跨线缆等值另由 wire 往返用例覆盖）
     # 消息流：3×CAP_QUERY（newcomer→peer 定向单发）+ 3×CAP_REPLY（peer→newcomer，capability 携带声明）
     assert len(sched.sent) == 6
     queries = [x for x in sched.sent if x.action == ActionType.CAP_QUERY.value]
@@ -132,8 +136,10 @@ def test_fresh_view_populated_only_by_accepted_replies():
         ),
         # 无能力载荷
         lambda r, q: r.__dict__.update(capability=None),
+        # 非 CAP_REPLY 动作类型（复核建议：该分支补证伪样例）
+        lambda r, q: r.__dict__.update(action="TELL"),
     ],
-    ids=["wrong-direction", "stale-correlation", "identity-mismatch", "no-capability"],
+    ids=["wrong-direction", "stale-correlation", "identity-mismatch", "no-capability", "wrong-action"],
 )
 def test_accept_reply_rejects_malformed_replies(mutate):
     q = CNR.make_query("newcomer-1", "executor-1", "q9")

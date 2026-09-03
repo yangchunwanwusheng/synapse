@@ -59,6 +59,11 @@ class Scheduler:
         cnr=None 且未传 view：路由表照常、消息流照发（协议层独立），返回已校验
         的响应能力 dict，但无视图可供后续 negotiate/resolve（调用方应显式感知）。
 
+        幂等分支口径注意：同 id 同能力重调时返回"当前视图"（不重发消息流）——
+        cnr=None 且未传 view 的场景下无可查视图，返回 {}（与首次调用的非空返回
+        不对称，属预期）；混用 view 传参（首次传独立 view、重试不传）会读到
+        不同来源的视图，调用方应保持同一 view 口径。
+
         边界如实声明：本编排是**进程内控制面定向分发**——peer 侧响应由本调度器
         代表各本地 agent 生成（agents 无 inbox/消息回调）；wire 序列化/反序列化
         与双端点往返在 tests/test_capability_discovery.py 的 transport 用例验证，

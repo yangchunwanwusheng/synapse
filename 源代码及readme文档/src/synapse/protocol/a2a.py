@@ -1,6 +1,6 @@
 """SYNAPSE Capability ↔ A2A Agent Card 静态映射（Issue #149015 可选项，M2 协议映射）。
 
-A2A（Agent2Agent，Linux Foundation 项目）Agent Card 规范正源 = a2aproject/A2A 仓库
+A2A（Agent2Agent；截至 pinned 快照时归属 Linux Foundation，2026-08-27 起转入 Agentic AI Foundation/AAIF）Agent Card 规范正源 = a2aproject/A2A 仓库
 `specification/a2a.proto`（a2a.json 是构建产物不入库）。本模块对 **pinned 快照**
 （tests/fixtures/a2a_agent_card_schema_snapshot.json，冻结自 commit 98853be376c8，
 2026-09-03 核验）做静态字段映射，不动态抓取任何规范网页。
@@ -110,6 +110,12 @@ def from_agent_card(card: dict, *, default_encodings: tuple[str, ...] | None = N
     if not isinstance(skill, dict) or not skill.get("id"):
         raise ValueError("Agent Card skill missing required field 'id'")
     tags = [str(t) for t in skill.get("tags") or []]
+    # 复审 P2-1：冲突前缀 tag（如两个不同 synapse:role:）静默仲裁 = 替外部卡片伪造唯一性，
+    # 与本函数 fail-closed 立场矛盾——单值前缀出现多于一个 tag 即拒绝（含重复同值，不规范化输入）
+    for prefix, field in ((_ROLE_TAG, "role"), (_FAMILY_TAG, "model_family")):
+        values = [t[len(prefix) :] for t in tags if t.startswith(prefix)]
+        if len(values) > 1:
+            raise ValueError(f"conflicting {field} tags: {values}（单值字段不得多次声明）")
     role = next((t[len(_ROLE_TAG) :] for t in tags if t.startswith(_ROLE_TAG)), str(skill.get("name", "")))
     actions = tuple(t[len(_ACTION_TAG) :] for t in tags if t.startswith(_ACTION_TAG))
     encodings = tuple(t[len(_ENCODING_TAG) :] for t in tags if t.startswith(_ENCODING_TAG))

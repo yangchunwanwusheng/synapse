@@ -1,6 +1,6 @@
 """CNR — Capability Negotiation & Resolution（赛题 M2 握手/能力发现/协议映射）。
 
-各 Agent 广播 Capability；协商发送方/接收方编码：取双方支持编码的交集中**最高密度**的一种，
+各 Agent 登记 Capability；协商发送方/接收方编码：取双方支持编码的交集中**最高密度**的一种，
 隐状态(hidden)仅同族允许，异构自动降级到 embedding/text（协议映射）。
 
 §2.2 能力从"声明"到"验证"（借鉴 hermes check_fn 门控）：hello 时若提供 check_fn，则对 cap.probe
@@ -138,6 +138,9 @@ class CNR:
         reply.receiver==query.sender）；关联（params.query_id==query.msg_id）；
         能力身份（capability.agent_id==reply.sender）。任何一项不符抛
         CNRProtocolError——丢失/篡改/迟到的响应不得进入视图（路由依据的完整性）。
+        边界如实声明：以上是**字段一致性校验，非认证边界**——无签名信道下能注入
+        消息且预知 query_id 的一方可构造字段全符的伪造响应（Agent Card 的
+        signatures/securitySchemes 未接入，见 protocol/a2a.py 边界声明）。
         """
         if reply.action != ActionType.CAP_REPLY.value:
             raise CNRProtocolError(f"not a CAP_REPLY (action={reply.action!r})")
