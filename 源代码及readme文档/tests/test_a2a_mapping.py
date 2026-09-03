@@ -70,7 +70,7 @@ def test_card_conforms_to_pinned_schema():
         assert "_" not in key, f"JSON 键 {key} 应为 lowerCamelCase"
 
 
-def test_pins_are_recorced():
+def test_pins_are_recorded():
     fx = _fixture()["pinned_source"]
     assert fx["commit"] == "98853be376c88df25e1704771cd3ea9ef8823a96"
     assert fx["file"].endswith("a2a.proto")
