@@ -11,7 +11,7 @@
 
 | 项 | 要求 | 说明 |
 |---|---|---|
-| 操作系统 | openEuler 24.03-LTS-SP3（原生安装或 VM 内安装均可；**容器不算**） | `/etc/os-release` 须含 SP3 标识；VM（KVM/VMware/Hyper-V 等）内原生安装的 openEuler 属原生 OS 轨 |
+| 操作系统 | openEuler 24.03-LTS-SP3（原生安装或**完整 VM** 内安装均可；**容器与 WSL2 不算**） | `/etc/os-release` 须含 SP3 标识；完整 VM（KVM/VMware/Hyper-V 等，openEuler 自带内核启动）属原生 OS 轨；**WSL2 共享宿主微软定制内核（microsoft-standard-WSL2），不构成 openEuler 原生内核证据**——自检脚本对此显式 FAIL |
 | Python | ≥ 3.11（openEuler 24.03 自带） | 与 CI 矩阵（3.11/3.13）一致；建议 `UV_PYTHON=python3 UV_PYTHON_PREFERENCE=only-system` 锁定系统解释器 |
 | uv | GitHub CI 验证版本 **0.9.5** | `python3 -m pip install --user uv==0.9.5`；装后确认 `~/.local/bin` 在 PATH |
 | 磁盘 | ≥ 1 GiB 空闲（uv sync/dev 依赖/dist） | aarch64 机器另需编译工具链余量 |
@@ -68,10 +68,10 @@ sh scripts/oe_native_check.sh --allow-container   # 仅限容器内做脚本机�
 | 项 | PASS 条件 | WARN/FAIL 含义与处置 |
 |---|---|---|
 | os | openEuler 24.03 且版本串含 SP3 | WARN=24.03 无 SP3 标识（查 `/etc/os-release`，交付要求精确 SP3）；FAIL=非 openEuler 24.03 |
-| form | 未检出容器（VM 属原生 OS 轨） | FAIL=检出容器（`.dockerenv`/cgroup/pid1 特征）——默认拒绝为原生证据；仅机制验证用 `--allow-container`；WARN=无 systemd-detect-virt 且特征不明，留档须人工补自证 |
+| form | 未检出容器与 WSL2 内核（完整 VM 属原生 OS 轨） | FAIL=检出容器（`.dockerenv`/cgroup/pid1 特征，默认拒绝为原生证据，仅机制验证用 `--allow-container`）**或检出 WSL2**（uname -r 含 microsoft / detect-virt 报 wsl——共享宿主定制内核，与容器轨同源，不构成原生证据）；WARN=无 systemd-detect-virt 且特征不明，留档须人工补自证 |
 | python | python3 ≥ 3.11 | FAIL=<3.11 或探测失败（dnf 装 python3） |
 | uv | uv 可用 | FAIL=未安装（§2 第 2 步；注意 PATH） |
-| shm | tmpfs ≥ 1 GiB 且可写 | WARN=<64 MiB（多进程共享内存预留不足）或 64MiB–1GiB（满足当前单进程自检、低于多进程推荐；docker-compose 预置 1gb）或非 tmpfs；FAIL=不可用 |
+| shm | tmpfs ≥ 1 GiB 且可写 | WARN=<64 MiB（多进程共享内存预留不足）或 64MiB–1GiB（满足当前单进程自检、低于多进程推荐；docker-compose 预置 1gb）或非 tmpfs/类型未能确认（两级探测均失败时保守按非 tmpfs）；FAIL=不可用 |
 | rlimit | nofile ≥ 1024（as/nproc/pids.max 快照） | WARN=nofile<1024（`ulimit -n` 或 systemd `LimitNOFILE`） |
 | af_unix | bind/listen/connect/accept + 字节往返成功 | FAIL=内核或环境不支持（SELinux/路径权限时查 §3） |
 | disk | 包根 ≥ 1 GiB | WARN=不足（清理或扩容） |
@@ -81,7 +81,7 @@ sh scripts/oe_native_check.sh --allow-container   # 仅限容器内做脚本机�
 
 在原生 openEuler 24.03-LTS-SP3 环境（物理机或 VM，非容器）逐项执行并勾选：
 
-- [ ] **0. 自证环境形态**：`cat /etc/os-release`（含 SP3）；`systemd-detect-virt --vm`（或无该命令时记录 `uname -a`、`ps -p 1 -o comm=`、`ls /.dockerenv /run/.containerenv 2>&1`）；确认非容器。
+- [ ] **0. 自证环境形态**：`cat /etc/os-release`（含 SP3）；`systemd-detect-virt --vm`（或无该命令时记录 `uname -a`、`ps -p 1 -o comm=`、`ls /.dockerenv /run/.containerenv 2>&1`）；确认非容器**且非 WSL2**（`uname -r` 不得含 microsoft——WSL2 共享宿主内核不算原生）。
 - [ ] **1. 干净检出**：`git clone`（或 `git status --short` 确认无已跟踪文件改动）；记录 `git rev-parse HEAD` 与分支。
 - [ ] **2. 依赖安装**：按 §2 完成；记录 `python3 --version`、`uv --version`。
 - [ ] **3. 环境自检**：`--env-only` 模式，0 FAIL；按 §4 处置 WARN。
@@ -96,6 +96,7 @@ sh scripts/oe_native_check.sh --allow-container   # 仅限容器内做脚本机�
 # 原生 openEuler 验证留档（#149016）
 
 - 执行日期（本地时区）：<YYYY-MM-DD HH:MM TZ>
+- 配置口径：门禁=离线 mock（default.yaml，零密钥零网络）
 - 执行人：<姓名/账号>　环境提供方式：<物理机 | KVM/VMware/Hyper-V VM | 其他（说明）>
 - 架构：`uname -m` = <x86_64/aarch64>
 

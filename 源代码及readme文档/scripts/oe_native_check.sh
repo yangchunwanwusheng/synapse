@@ -32,7 +32,7 @@ for arg in "$@"; do
   case "$arg" in
     --env-only) ENV_ONLY=1 ;;
     --allow-container) ALLOW_CONTAINER=1 ;;
-    -h|--help) sed -n '2,30p' "$0" | sed 's/^# \{0,1\}//'; exit 0 ;;
+    -h|--help) sed -n '2,/^$/p' "$0" | sed 's/^# \{0,1\}//'; exit 0 ;;
     *) printf '未知参数: %s（--env-only | --allow-container | --help）\n' "$arg" >&2; exit 2 ;;
   esac
 done
@@ -103,15 +103,24 @@ case "$detect_container" in
     ;;
   *) is_container=1 ;;
 esac
-form_detail="detect-virt.container=${detect_container} detect-virt.vm=${detect_vm} hints=${container_hints:-none} pid1=${pid1:-?}"
+# WSL2 内核特征（复审 P1-1）：systemd-detect-virt 在 WSL2 报 vm=wsl，但其共享宿主微软
+# 定制内核（microsoft-standard-WSL2）——与本项目容器轨证据同源内核，不构成 openEuler
+# 原生内核证据。与脚本自述的"VM 属原生 OS 轨"例外区分（那指 KVM/VMware/Hyper-V 完整 VM）。
+wsl_kernel=0
+case "$(uname -r 2>/dev/null || echo)" in
+  *[Mm]icrosoft*) wsl_kernel=1 ;;
+esac
+form_detail="detect-virt.container=${detect_container} detect-virt.vm=${detect_vm} hints=${container_hints:-none} pid1=${pid1:-?} uname.r=$(uname -r 2>/dev/null || echo '?')"
 if [ "$is_container" -eq 1 ]; then
   if [ "$ALLOW_CONTAINER" -eq 1 ]; then
     result WARN form "容器环境（${form_detail}）——仅脚本机制验证，NOT NATIVE EVIDENCE"
   else
     result FAIL form "容器环境（${form_detail}）：默认拒绝为原生证据（统筹红线）；如仅需验证脚本机制请加 --allow-container"
   fi
+elif [ "$wsl_kernel" -eq 1 ] || [ "$detect_vm" = "wsl" ]; then
+  result FAIL form "WSL2 环境（${form_detail}）：共享宿主微软定制内核，非 openEuler 原生内核——不构成原生 OS 轨证据（与容器轨同源内核）；请使用原生硬件或完整 VM（KVM/VMware/Hyper-V 等）环境"
 elif [ "$detect_vm" != "none" ] && [ "$detect_vm" != "unknown" ]; then
-  result PASS form "虚拟机形态（${detect_vm}；${form_detail}）——VM 内原生安装的 openEuler 属原生 OS 轨"
+  result PASS form "虚拟机形态（${detect_vm}；${form_detail}）——完整 VM 内原生安装的 openEuler 属原生 OS 轨"
 elif [ "$detect_container" = "unknown" ]; then
   result WARN form "执行形态无法确认（无 systemd-detect-virt 且无容器特征；${form_detail}）；留档须人工补自证字段（见模板）"
 else
@@ -131,7 +140,8 @@ if command -v python3 >/dev/null 2>&1; then
       result FAIL python "python3 ${pyv} < 3.11（${py_path}）"
     fi
   else
-    result FAIL python "python3 存在但版本探测失败"
+    py_diag=$(python3 -V 2>&1 | head -n 1)
+    result FAIL python "python3 存在但版本探测失败（${py_diag}）"
   fi
 else
   result FAIL python "python3 未安装（dnf install -y python3 python3-pip）"
@@ -175,14 +185,17 @@ PYEOF
     total_mib=*writable=1)
       shm_mib=${shm_probe#total_mib=}
       shm_mib=${shm_mib% writable=1}
-      if [ -n "$shm_type" ] && [ "$shm_type" != "tmpfs" ]; then
+      if [ -z "$shm_type" ]; then
+        # 复审 P3-1：两级探测均未确认 fstype 时不得按 tmpfs PASS（文档 PASS 条件=tmpfs）
+        result WARN shm "fstype 未能确认（无 findmnt 且 /proc/self/mountinfo 无 /dev/shm 独立挂载）——保守按非 tmpfs 处理（容量 ${shm_mib}MiB）"
+      elif [ "$shm_type" != "tmpfs" ]; then
         result WARN shm "可写但非 tmpfs（fstype=${shm_type}，${shm_mib}MiB）——多进程共享内存语义不符"
       elif [ "$shm_mib" -lt 64 ]; then
         result WARN shm "tmpfs 仅 ${shm_mib}MiB（<64MiB）——多进程共享内存预留不足"
       elif [ "$shm_mib" -lt 1024 ]; then
         result WARN shm "tmpfs ${shm_mib}MiB：满足当前单进程自检，低于多进程推荐 1GiB（docker-compose 预置 shm_size=1gb）"
       else
-        result PASS shm "tmpfs ${shm_mib}MiB（fstype=${shm_type:-unknown}，可写）"
+        result PASS shm "tmpfs ${shm_mib}MiB（fstype=${shm_type}，可写）"
       fi
       ;;
     *)
@@ -234,7 +247,13 @@ try:
                 conn, _ = srv.accept()
                 try:
                     cli.sendall(marker)
-                    if conn.recv(len(marker)) != marker:
+                    got = b""
+                    while len(got) < len(marker):
+                        chunk = conn.recv(len(marker) - len(got))
+                        if not chunk:
+                            raise OSError("short read on AF_UNIX roundtrip")
+                        got += chunk
+                    if got != marker:
                         raise OSError("marker mismatch")
                 finally:
                     conn.close()
